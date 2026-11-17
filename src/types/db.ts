@@ -73,3 +73,14 @@ export interface DashboardData {
   consent_distribution: { status: ConsentStatus; contacts: number }[];
   recent_activity: { action: string; entity_type: string; entity_id: string | null; metadata: Record<string, unknown>; created_at: string }[];
 }
+
+export interface SignupForm {
+  id: string; slug: string; title: string; description: string | null; organizer_name: string; consent_text: string;
+  destination_group_id: string | null; source_id: string; status: 'active' | 'paused'; created_at: string; updated_at: string;
+  signup_submissions?: { count: number }[];
+}
+export interface SignupSubmission {
+  id: string; form_id: string; contact_id: string | null; name: string | null; phone: string | null;
+  outcome: 'new' | 'existing' | 'suppressed'; created_at: string;
+}
+export interface PublicSignupForm { title: string; description: string | null; organizer_name: string; consent_text: string; group_name: string | null }

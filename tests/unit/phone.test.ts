@@ -83,3 +83,16 @@ describe('normalizePhone', () => {
     expect(maskPhone('+5511999999999')).toBe('+5511****99');
   });
 });
+
+import { signupPhone } from '@/pages/Signup/PublicSignupPage';
+describe('telefone da página de inscrição', () => {
+  it('aceita celular BR em vários formatos e recusa fixo, 8 dígitos e DDD inválido', () => {
+    expect(signupPhone('(84) 99999-0001')).toEqual({ phone: '+5584999990001' });
+    expect(signupPhone('+55 84 99999-0001')).toEqual({ phone: '+5584999990001' });
+    expect(signupPhone('8432221111')).toMatchObject({ error: expect.stringMatching(/celular/) });
+    expect(signupPhone('84 9999-0001')).toMatchObject({ error: expect.stringMatching(/9 dígitos/) });
+    expect(signupPhone('20 99999-0001')).toMatchObject({ error: expect.stringMatching(/DDD/) });
+    expect(signupPhone('')).toMatchObject({ error: expect.any(String) });
+    expect(signupPhone('+351 912 345 678')).toEqual({ phone: '+351912345678' });
+  });
+});

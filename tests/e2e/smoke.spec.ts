@@ -3,7 +3,7 @@ import { mockBackend } from './mockBackend';
 
 const PAGES: [string, RegExp][] = [
   ['/', /Dashboard/], ['/importar', /Importar contatos/], ['/fontes', /Fontes de contatos/], ['/contatos', /Central de contatos/],
-  ['/duplicidades', /Duplicidades/], ['/segmentos', /Segmentação/], ['/grupos', /Grupos de destino/], ['/convites', /Convites/],
+  ['/duplicidades', /Duplicidades/], ['/segmentos', /Segmentação/], ['/grupos', /Grupos de destino/], ['/inscricoes', /Páginas de inscrição/], ['/convites', /Convites/],
   ['/relatorios', /Relatórios/], ['/historico', /Histórico/], ['/configuracoes', /Configurações/],
 ];
 
@@ -71,4 +71,41 @@ test('arquivo com extensão inválida é recusado', async ({ page }) => {
   await page.goto('/importar');
   await page.locator('input[type=file]').setInputFiles({ name: 'lista.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF') });
   await expect(page.getByText('Extensão inválida')).toBeVisible();
+});
+
+test('página pública de inscrição: valida, exige autorização e mostra o botão do grupo', async ({ page }) => {
+  const state = await mockBackend(page, { loggedIn: false });
+  await page.goto('/i/abc123def456');
+  await expect(page.getByRole('heading', { name: 'Grupo VIP Segurança do Trabalho' })).toBeVisible();
+  await page.getByLabel('Seu nome').fill('Maria Souza');
+  await page.getByLabel('Seu WhatsApp (com DDD)').fill('84 9999-0001');
+  await page.getByRole('button', { name: 'Quero me inscrever' }).click();
+  await expect(page.getByText('9 dígitos')).toBeVisible();
+  await expect(page.getByText('Marque a autorização')).toBeVisible();
+  await page.getByLabel('Seu WhatsApp (com DDD)').fill('(84) 99999-0001');
+  await page.getByText('Autorizo Ivan Treinamentos').click();
+  await page.screenshot({ path: `test-results/inscricao-form-${test.info().project.name}.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Quero me inscrever' }).click();
+  await expect(page.getByRole('heading', { name: 'Inscrição confirmada!' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Entrar no grupo Grupo A/ })).toHaveAttribute('href', 'https://chat.whatsapp.com/AbCdEfGhIjKlMn');
+  expect(state.signups[0]).toMatchObject({ p_slug: 'abc123def456', p_name: 'Maria Souza', p_phone: '+5584999990001', p_consent: true });
+  await page.screenshot({ path: `test-results/inscricao-ok-${test.info().project.name}.png`, fullPage: true });
+});
+
+test('página de inscrição inexistente mostra aviso', async ({ page }) => {
+  await mockBackend(page, { loggedIn: false });
+  await page.goto('/i/naoexiste0000');
+  await expect(page.getByRole('heading', { name: 'Inscrições encerradas' })).toBeVisible();
+});
+
+test('gestão das páginas de inscrição', async ({ page }) => {
+  await mockBackend(page);
+  await page.goto('/inscricoes');
+  await expect(page.getByText('37')).toBeVisible();
+  await expect(page.getByText('/i/abc123def456')).toBeVisible();
+  await page.getByRole('button', { name: 'Nova página' }).click();
+  await page.getByLabel('Quem coleta os dados').fill('Ivan Treinamentos');
+  await page.getByRole('button', { name: 'Usar texto pronto' }).click();
+  await expect(page.getByLabel('Texto da autorização')).toHaveValue(/Autorizo Ivan Treinamentos/);
+  await page.screenshot({ path: `test-results/inscricoes-gestao-${test.info().project.name}.png`, fullPage: true });
 });

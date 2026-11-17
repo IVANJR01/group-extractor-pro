@@ -21,6 +21,8 @@ const CampaignPage = lazy(() => import('@/pages/Invitations/CampaignPage').then(
 const ReportsPage = lazy(() => import('@/pages/Reports/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 const HistoryPage = lazy(() => import('@/pages/History/HistoryPage').then((m) => ({ default: m.HistoryPage })));
 const SettingsPage = lazy(() => import('@/pages/Settings/SettingsPage').then((m) => ({ default: m.SettingsPage })));
+const SignupFormsPage = lazy(() => import('@/pages/Signup/SignupFormsPage').then((m) => ({ default: m.SignupFormsPage })));
+const PublicSignupPage = lazy(() => import('@/pages/Signup/PublicSignupPage').then((m) => ({ default: m.PublicSignupPage })));
 const SourcesPage = lazy(() => import('@/pages/Sources/SourcesPage').then((m) => ({ default: m.SourcesPage })));
 
 const queryClient = new QueryClient({
@@ -53,6 +55,7 @@ export default function App() {
             <BrowserRouter>
               <Suspense fallback={<Fallback />}>
                 <Routes>
+                  <Route path="/i/:slug" element={<PublicSignupPage />} />
                   <Route path="/entrar" element={<PublicOnly><LoginPage /></PublicOnly>} />
                   <Route element={<Protected><AppLayout /></Protected>}>
                     <Route index element={<DashboardPage />} />
@@ -62,6 +65,7 @@ export default function App() {
                     <Route path="duplicidades" element={<DuplicatesPage />} />
                     <Route path="segmentos" element={<SegmentsPage />} />
                     <Route path="grupos" element={<GroupsPage />} />
+                    <Route path="inscricoes" element={<SignupFormsPage />} />
                     <Route path="convites" element={<InvitationsPage />} />
                     <Route path="convites/:id" element={<CampaignPage />} />
                     <Route path="relatorios" element={<ReportsPage />} />

@@ -25,10 +25,10 @@ const CONTACTS = Array.from({ length: 25 }, (_, i) => ({
   source_ids: i % 4 === 0 ? ['src-x', 'src-y'] : ['src-x'], occurrences: i % 4 === 0 ? 2 : 1, suppressed: false, last_event_type: null, last_event_at: null, campaign_ids: [],
 }));
 
-export interface MockState { processed: number; total: number; uploaded: number }
+export interface MockState { processed: number; total: number; uploaded: number; signups: Record<string, unknown>[] }
 
 export async function mockBackend(page: Page, opts: { loggedIn?: boolean } = {}) {
-  const state: MockState = { processed: 0, total: 0, uploaded: 0 };
+  const state: MockState = { processed: 0, total: 0, uploaded: 0, signups: [] };
   if (opts.loggedIn !== false) {
     const session = { access_token: 'e2e', refresh_token: 'e2e', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user: USER };
     await page.addInitScript((s) => localStorage.setItem('sb-e2e-mock-auth-token', JSON.stringify(s)), session);
@@ -50,6 +50,8 @@ export async function mockBackend(page: Page, opts: { loggedIn?: boolean } = {})
     if (rpc === 'segment_contacts') return json(route, CONTACTS, { 'content-range': `0-24/2203` });
     if (rpc === 'segment_count') return json(route, { total: 600, eligible: 120, without_consent: 480, invalid: 0 });
     if (rpc === 'group_stats') return json(route, []);
+    if (rpc === 'get_signup_form') return json(route, body.p_slug === 'abc123def456' ? { title: 'Grupo VIP Segurança do Trabalho', description: 'Dicas semanais de NRs e vagas.', organizer_name: 'Ivan Treinamentos', consent_text: 'Autorizo Ivan Treinamentos a usar meu nome e WhatsApp para me enviar o convite do grupo. Posso cancelar quando quiser.', group_name: 'Grupo A' } : null);
+    if (rpc === 'submit_signup') { state.signups.push(body); return json(route, { ok: true, group_name: 'Grupo A', invite_url: 'https://chat.whatsapp.com/AbCdEfGhIjKlMn' }); }
     if (rpc === 'create_import_job') { state.total = body.p_total_rows; return json(route, { job_id: 'job-1', previous_job_id: null }); }
     if (rpc === 'process_import_batch') {
       state.processed = state.uploaded;
@@ -58,6 +60,7 @@ export async function mockBackend(page: Page, opts: { loggedIn?: boolean } = {})
     }
     if (rpc) return json(route, []);
     if (p.endsWith('/import_rows') && req.method() === 'POST') { state.uploaded += (body as unknown[]).length; return route.fulfill({ status: 201, headers: { 'access-control-allow-origin': '*' } }); }
+    if (p.endsWith('/signup_forms')) return json(route, [{ id: 'f1', slug: 'abc123def456', title: 'Grupo VIP Segurança do Trabalho', description: null, organizer_name: 'Ivan Treinamentos', consent_text: 'x'.repeat(30), destination_group_id: null, source_id: 'src-x', status: 'active', created_at: '2026-11-17T05:00:00Z', updated_at: '2026-11-17T05:00:00Z', signup_submissions: [{ count: 37 }] }]);
     if (p.endsWith('/contact_sources')) return json(route, req.method() === 'GET' ? SRC : SRC[0]);
     if (p.endsWith('/profiles')) return json(route, url.searchParams.get('select') ? { full_name: 'Teste', email: USER.email } : []);
     return json(route, [], { 'content-range': '*/0' });
