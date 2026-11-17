@@ -16,3 +16,14 @@ describe('exportação', () => {
     expect(csv).toContain('"Ana ""Bia""";');
   });
 });
+
+import { isSecretKey } from '@/lib/supabase';
+describe('proteção da chave secreta', () => {
+  const jwt = (role: string) => `x.${btoa(JSON.stringify({ role })).replace(/=+$/, '')}.y`;
+  it('recusa sb_secret_ e JWT service_role; aceita publishable/anon', () => {
+    expect(isSecretKey('sb_secret_abc')).toBe(true);
+    expect(isSecretKey(jwt('service_role'))).toBe(true);
+    expect(isSecretKey(jwt('anon'))).toBe(false);
+    expect(isSecretKey('sb_publishable_abc')).toBe(false);
+  });
+});

@@ -89,3 +89,20 @@ end;
 $$;
 revoke all on function public.export_contacts(text, jsonb, integer, integer) from public, anon;
 grant execute on function public.export_contacts(text, jsonb, integer, integer) to authenticated;
+
+-- Revisão de segurança: dentro de SECURITY DEFINER, current_user é o dono da função;
+-- a checagem correta usa session_user (quem abriu a conexão).
+create or replace function public.purge_import_staging(p_older_than interval default interval '30 days')
+returns integer language plpgsql security definer set search_path = '' as $$
+declare n integer;
+begin
+  if public.jwt_role() is distinct from 'service_role' and session_user not in ('postgres', 'supabase_admin') then
+    raise exception 'Somente o servidor pode executar' using errcode = '42501';
+  end if;
+  delete from public.import_rows r using public.import_jobs j
+   where r.job_id = j.id and j.status in ('completed', 'cancelled', 'failed') and j.completed_at < now() - p_older_than;
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+revoke all on function public.purge_import_staging(interval) from public, anon, authenticated;
