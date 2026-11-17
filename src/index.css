@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-sidebar: var(--sidebar);
+
+  --radius-lg: 0.75rem;
+  --radius-md: 0.5rem;
+  --radius-sm: 0.375rem;
+
+  --animate-fade-in: fade-in 0.25s ease-out;
+  @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+}
+
+:root {
+  --background: #f7f8f7;
+  --foreground: #0f1512;
+  --card: #ffffff;
+  --muted: #f0f2f0;
+  --muted-foreground: #5d6b63;
+  --border: #e3e7e4;
+  --input: #d7ddd9;
+  --ring: #16a34a;
+  --primary: #15803d;
+  --primary-foreground: #ffffff;
+  --accent: #e8f5ec;
+  --accent-foreground: #14532d;
+  --destructive: #dc2626;
+  --warning: #b45309;
+  --success: #15803d;
+  --sidebar: #ffffff;
+  color-scheme: light;
+}
+
+.dark {
+  --background: #0b0f0d;
+  --foreground: #e8ede9;
+  --card: #111714;
+  --muted: #18201b;
+  --muted-foreground: #8f9e95;
+  --border: #222c26;
+  --input: #2b3730;
+  --ring: #22c55e;
+  --primary: #22c55e;
+  --primary-foreground: #04150a;
+  --accent: #14281b;
+  --accent-foreground: #bbf7d0;
+  --destructive: #f87171;
+  --warning: #fbbf24;
+  --success: #4ade80;
+  --sidebar: #0e1411;
+  color-scheme: dark;
+}
+
+@layer base {
+  * { border-color: var(--border); }
+  html, body, #root { height: 100%; }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
