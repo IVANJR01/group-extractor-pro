@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/feedback';
 import { ComingSoon } from '@/components/shared/ComingSoon';
 
 const DashboardPage = lazy(() => import('@/pages/Dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const ImportPage = lazy(() => import('@/pages/Imports/ImportPage').then((m) => ({ default: m.ImportPage })));
 const SourcesPage = lazy(() => import('@/pages/Sources/SourcesPage').then((m) => ({ default: m.SourcesPage })));
 
 const queryClient = new QueryClient({
@@ -48,7 +49,7 @@ export default function App() {
                   <Route element={<Protected><AppLayout /></Protected>}>
                     <Route index element={<DashboardPage />} />
                     <Route path="fontes" element={<SourcesPage />} />
-                    <Route path="importar" element={<ComingSoon title="Importar contatos" description="CSV, Excel e TXT com mapeamento de colunas e processamento em lotes." phase="Fase 4" />} />
+                    <Route path="importar" element={<ImportPage />} />
                     <Route path="contatos" element={<ComingSoon title="Central de contatos" description="Busca, filtros e ações por contato." phase="Fase 5" />} />
                     <Route path="duplicidades" element={<ComingSoon title="Duplicidades" description="Telefones repetidos entre fontes e conflitos de nome." phase="Fase 5" />} />
                     <Route path="segmentos" element={<ComingSoon title="Segmentação" description="Filtros salvos e reutilizáveis." phase="Fase 5" />} />
