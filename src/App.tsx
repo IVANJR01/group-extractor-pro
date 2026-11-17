@@ -9,10 +9,18 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/Auth/LoginPage';
 import { SetupRequired } from '@/pages/Auth/SetupRequired';
 import { Skeleton } from '@/components/ui/feedback';
-import { ComingSoon } from '@/components/shared/ComingSoon';
 
 const DashboardPage = lazy(() => import('@/pages/Dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })));
 const ImportPage = lazy(() => import('@/pages/Imports/ImportPage').then((m) => ({ default: m.ImportPage })));
+const ContactsPage = lazy(() => import('@/pages/Contacts/ContactsPage').then((m) => ({ default: m.ContactsPage })));
+const DuplicatesPage = lazy(() => import('@/pages/Duplicates/DuplicatesPage').then((m) => ({ default: m.DuplicatesPage })));
+const SegmentsPage = lazy(() => import('@/pages/Segments/SegmentsPage').then((m) => ({ default: m.SegmentsPage })));
+const GroupsPage = lazy(() => import('@/pages/DestinationGroups/GroupsPage').then((m) => ({ default: m.GroupsPage })));
+const InvitationsPage = lazy(() => import('@/pages/Invitations/InvitationsPage').then((m) => ({ default: m.InvitationsPage })));
+const CampaignPage = lazy(() => import('@/pages/Invitations/CampaignPage').then((m) => ({ default: m.CampaignPage })));
+const ReportsPage = lazy(() => import('@/pages/Reports/ReportsPage').then((m) => ({ default: m.ReportsPage })));
+const HistoryPage = lazy(() => import('@/pages/History/HistoryPage').then((m) => ({ default: m.HistoryPage })));
+const SettingsPage = lazy(() => import('@/pages/Settings/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 const SourcesPage = lazy(() => import('@/pages/Sources/SourcesPage').then((m) => ({ default: m.SourcesPage })));
 
 const queryClient = new QueryClient({
@@ -50,14 +58,15 @@ export default function App() {
                     <Route index element={<DashboardPage />} />
                     <Route path="fontes" element={<SourcesPage />} />
                     <Route path="importar" element={<ImportPage />} />
-                    <Route path="contatos" element={<ComingSoon title="Central de contatos" description="Busca, filtros e ações por contato." phase="Fase 5" />} />
-                    <Route path="duplicidades" element={<ComingSoon title="Duplicidades" description="Telefones repetidos entre fontes e conflitos de nome." phase="Fase 5" />} />
-                    <Route path="segmentos" element={<ComingSoon title="Segmentação" description="Filtros salvos e reutilizáveis." phase="Fase 5" />} />
-                    <Route path="grupos" element={<ComingSoon title="Grupos de destino" description="Cadastro do Grupo A e links de convite." phase="Fase 6" />} />
-                    <Route path="convites" element={<ComingSoon title="Convites" description="Campanhas de convite para contatos autorizados." phase="Fase 6" />} />
-                    <Route path="relatorios" element={<ComingSoon title="Relatórios" description="Exportações CSV e XLSX." phase="Fase 7" />} />
-                    <Route path="historico" element={<ComingSoon title="Histórico" description="Importações e trilha de auditoria." phase="Fase 7" />} />
-                    <Route path="configuracoes" element={<ComingSoon title="Configurações" description="Perfil, senha e privacidade." phase="Fase 7" />} />
+                    <Route path="contatos" element={<ContactsPage />} />
+                    <Route path="duplicidades" element={<DuplicatesPage />} />
+                    <Route path="segmentos" element={<SegmentsPage />} />
+                    <Route path="grupos" element={<GroupsPage />} />
+                    <Route path="convites" element={<InvitationsPage />} />
+                    <Route path="convites/:id" element={<CampaignPage />} />
+                    <Route path="relatorios" element={<ReportsPage />} />
+                    <Route path="historico" element={<HistoryPage />} />
+                    <Route path="configuracoes" element={<SettingsPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Route>
                 </Routes>

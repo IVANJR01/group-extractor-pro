@@ -206,6 +206,34 @@ d('banco de dados', () => {
       expect(await count(A, `select count(*) n from suppression_list where dedup_key='+5584988888888' and reason='deletion_request'`)).toBe(1);
     });
 
+    it('ocorrências, conflito de nome e números por grupo', async () => {
+      const s1 = await createSource(A, 'Conflito 1');
+      const s2 = await createSource(A, 'Conflito 2');
+      await importRows(A, s1, 'k1.csv', [{ name: 'João', phone: '+5583999990000' }], '4'.repeat(64));
+      await importRows(A, s2, 'k2.csv', [{ name: 'Ana', phone: '+5583999990000' }], '5'.repeat(64));
+      const joao = await as(A, async (c) => (await c.query(`select id from contacts where normalized_phone = '+5583999990000'`)).rows[0].id);
+      {
+        const occ = await as(A, async (c) => (await c.query(`select * from contact_occurrences($1)`, [joao])).rows);
+        expect(occ.map((o: any) => o.original_name)).toEqual(['João', 'Ana']);
+        await as(A, (c) => c.query(`select resolve_name_conflict($1, 'Ana')`, [joao]));
+        expect(await as(A, async (c) => (await c.query(`select name, name_conflicts from contacts where id=$1`, [joao])).rows[0])).toEqual({ name: 'Ana', name_conflicts: [] });
+        await expect(as(B, (c) => c.query(`select resolve_name_conflict($1, 'x')`, [joao]))).rejects.toThrow(/não encontrado/);
+      }
+      const gs = await as(A, async (c) => (await c.query(`select * from group_stats()`)).rows[0]);
+      expect(Number(gs.shared)).toBe(1);
+      expect(await count(B, `select count(*) n from group_stats()`)).toBe(0);
+    });
+
+    it('exportação paginada registra auditoria uma única vez', async () => {
+      const before = await count(A, `select count(*) n from audit_logs where action='export.contacts'`);
+      const p1 = await as(A, async (c) => (await c.query(`select * from export_contacts('unique', '{}', 0, 1000)`)).rows);
+      const p2 = await as(A, async (c) => (await c.query(`select * from export_contacts('unique', '{}', 1000, 1000)`)).rows);
+      expect(p1).toHaveLength(1000);
+      expect(p2.length).toBeGreaterThan(0);
+      expect(new Set([...p1, ...p2].map((r: any) => r.phone)).size).toBe(p1.length + p2.length);
+      expect(await count(A, `select count(*) n from audit_logs where action='export.contacts'`)).toBe(before + 1);
+    });
+
     it('dashboard lê números reais do banco', async () => {
       const dsh = await as(A, async (c) => (await c.query(`select dashboard_overview(30) d`)).rows[0].d);
       expect(dsh.kpis.unique_contacts).toBeGreaterThanOrEqual(2200);
