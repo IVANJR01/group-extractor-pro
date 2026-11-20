@@ -255,7 +255,7 @@ export function downloadGoogleContactsCSV(fileName: string, contacts: SavedConta
 }
 
 export function openGoogleContactsImport(email: string = '3msolucoes01@gmail.com'): void {
-  const url = `https://contacts.google.com/import?authuser=${encodeURIComponent(email)}`;
+  const url = `https://contacts.google.com/?authuser=${encodeURIComponent(email)}`;
   window.open(url, '_blank');
 }
 

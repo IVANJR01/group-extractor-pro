@@ -32,6 +32,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { PageHeader } from '@/components/ui/feedback';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/contexts/toast';
 import { cn } from '@/lib/utils';
 import {
@@ -451,18 +452,25 @@ export function DashboardPage() {
   // SINCRONIZAR COM GOOGLE CONTATOS (3msolucoes01@gmail.com)
   const [googleEmail, setGoogleEmail] = useState('3msolucoes01@gmail.com');
   const [isEditingEmail, setIsEditingEmail] = useState(false);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [lastDownloadedFile, setLastDownloadedFile] = useState('');
 
   const handleSyncGoogleContacts = () => {
     if (!session || session.contacts.length === 0) {
       toast('Carregue ou extraia contatos antes de sincronizar.', 'error');
       return;
     }
+    const cleanGroupName = (session.groupName || '3mpro').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const fileName = `contatos_${cleanGroupName}_google.csv`;
+    setLastDownloadedFile(fileName);
+
     // 1. Gera e baixa o arquivo CSV formatado especialmente para o Google Contacts
     downloadGoogleContactsCSV(session.groupName || '3mpro', session.contacts, '3MPRO');
-    // 2. Abre a tela de importação do Google Contacts na conta informada
+    // 2. Abre a página oficial do Google Contacts na conta informada (sem 404)
     openGoogleContactsImport(googleEmail);
-    // 3. Notifica o usuário
-    toast(`📥 Arquivo baixado e página do Google Contatos aberta na conta ${googleEmail}! Clique em "Importar" no Google e selecione o arquivo.`, 'info');
+    // 3. Abre o modal explicativo com o passo a passo
+    setSyncModalOpen(true);
+    toast(`📥 Arquivo baixado! No Google Contatos, clique em "Importar contatos" e selecione o arquivo.`, 'info');
   };
 
   const handleDownloadVCFDirect = () => {
@@ -868,6 +876,110 @@ export function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* MODAL INFORMATIVO: PASSO A PASSO GOOGLE CONTATOS */}
+      <Dialog
+        open={syncModalOpen}
+        onClose={() => setSyncModalOpen(false)}
+        title={`📥 Como Importar no Google Contatos (${googleEmail})`}
+        description="O arquivo oficial foi baixado na sua pasta de Downloads. Siga estes passos simples:"
+        className="sm:max-w-xl"
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <Button variant="outline" size="sm" onClick={() => setSyncModalOpen(false)}>
+              Fechar
+            </Button>
+            <Button
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold gap-2"
+              onClick={() => openGoogleContactsImport(googleEmail)}
+            >
+              <ExternalLink className="size-4" />
+              Abrir Google Contatos
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 text-sm">
+          <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center gap-3">
+            <span className="text-2xl">📁</span>
+            <div>
+              <p className="font-semibold text-blue-200">
+                Arquivo baixado na sua pasta de Downloads:
+              </p>
+              <code className="text-xs bg-slate-900 px-2 py-0.5 rounded text-blue-300 font-mono">
+                {lastDownloadedFile || 'contatos_3mpro_google.csv'}
+              </code>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-card/60 border border-border">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-xs font-bold text-blue-400">
+                1
+              </div>
+              <div>
+                <p className="font-medium text-foreground">
+                  Acesse a aba do <strong>Google Contatos</strong>
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  A página da conta <strong>{googleEmail}</strong> foi aberta no seu navegador.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-card/60 border border-border">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-xs font-bold text-blue-400">
+                2
+              </div>
+              <div>
+                <p className="font-medium text-foreground">
+                  Clique no botão azul <strong>"Importar contatos"</strong>
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Ele fica bem no centro da tela (ou no menu lateral esquerdo em <em>"Importar"</em>).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-card/60 border border-border">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-xs font-bold text-blue-400">
+                3
+              </div>
+              <div>
+                <p className="font-medium text-foreground">
+                  Selecione o arquivo e clique em <strong>"Importar"</strong>
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Escolha o arquivo que acabou de baixar na sua pasta de Downloads. Em 5 segundos todos os contatos estarão salvos no Google e sincronizados no seu celular!
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">Baixar novamente:</span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-7"
+                onClick={() => downloadGoogleContactsCSV(session?.groupName || '3mpro', session?.contacts || [], '3MPRO')}
+              >
+                📥 Baixar CSV
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-7"
+                onClick={() => downloadVCardFile(session?.groupName || 'contatos_agenda_3mpro', session?.contacts || [])}
+              >
+                📱 Baixar .VCF
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Dialog>
 
       {/* SE AINDA NÃO HÁ CONTATOS IMPORTADOS: MOSTRA O ROBÔ PARA JÁ PODER CONECTAR OS CHIPS */}
       {allContacts.length === 0 && (
