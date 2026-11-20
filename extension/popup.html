@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Group Extractor Pro</title>
+  <style>
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      box-sizing: border-box;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 12px;
+    }
+    .logo-badge {
+      background: #10b981;
+      color: #0f172a;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 16px;
+    }
+    .title {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 0;
+    }
+    .desc {
+      font-size: 11px;
+      color: #94a3b8;
+      margin: 2px 0 0 0;
+    }
+    .status-card {
+      background: #1e293b;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 16px;
+      border: 1px solid #334155;
+    }
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+    }
+    .dot.active {
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+    .btn {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-primary {
+      background: #10b981;
+      color: #ffffff;
+    }
+    .btn-secondary {
+      background: #334155;
+      color: #f8fafc;
+    }
+    .hint {
+      font-size: 11px;
+      color: #64748b;
+      text-align: center;
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo-badge">⚡</div>
+    <div>
+      <h1 class="title">Group Extractor Pro</h1>
+      <p class="desc">Extrator de Grupos do WhatsApp</p>
+    </div>
+  </div>
+
+  <div class="status-card">
+    <div class="status-indicator" id="status-indicator">
+      <span class="dot" id="status-dot"></span>
+      <span id="status-text">Verificando WhatsApp Web...</span>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="btn-extract">
+    ⚡ Extrair Grupo Aberto
+  </button>
+
+  <button class="btn btn-secondary" id="btn-open-wa">
+    💬 Abrir WhatsApp Web
+  </button>
+
+  <p class="hint">
+    Abra qualquer grupo no WhatsApp Web e clique em "Extrair Grupo" para gerar sua lista Excel/CSV.
+  </p>
+
+  <script src="popup.js"></script>
+</body>
+</html>

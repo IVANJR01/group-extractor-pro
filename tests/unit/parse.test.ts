@@ -53,6 +53,14 @@ describe('TXT', () => {
     const t = parseDelimitedText('11999999999\n+5511999999999\n(11) 99999-9999\n');
     expect(analyze(t, detectMapping(t))).toMatchObject({ total: 3, uniqueInFile: 1, duplicatesInFile: 2 });
   });
+  it('detecta e extrai participantes de exportação do WhatsApp .txt automaticamente', () => {
+    const chat = '12/03/2024, 10:15 - +55 11 99999-0001: Olá\n12/03/2024, 10:16 - +55 21 98888-0002: Oi tudo bem?\n';
+    const t = parseDelimitedText(chat);
+    expect(t.headers).toEqual(['Nome', 'Telefone']);
+    expect(t.rows).toHaveLength(2);
+    expect(t.rows[0][1]).toBe('+5511999990001');
+    expect(t.rows[1][1]).toBe('+5521988880002');
+  });
 });
 
 describe('XLSX / XLS', () => {

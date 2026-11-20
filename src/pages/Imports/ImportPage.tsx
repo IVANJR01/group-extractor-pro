@@ -76,6 +76,18 @@ export function ImportPage() {
     await loadFile(new File([`Nome;Telefone\n${text.split('\n').map((l) => l.includes(';') || l.includes(',') ? l.replace(',', ';') : `;${l}`).join('\n')}`], 'importacao-manual.txt', { type: 'text/plain' }));
   }
 
+  // Se houver contatos pré-carregados do Extrator de WhatsApp
+  useEffect(() => {
+    const pending = sessionStorage.getItem('gep_pending_import_text');
+    if (pending) {
+      sessionStorage.removeItem('gep_pending_import_text');
+      const groupName = sessionStorage.getItem('gep_pending_group_name') || 'Grupo WhatsApp';
+      sessionStorage.removeItem('gep_pending_group_name');
+      const cleanName = `whatsapp_${groupName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}.csv`;
+      loadFile(new File([pending], cleanName, { type: 'text/csv' }));
+    }
+  }, []);
+
   // Ao chegar no mapeamento, usa a detecção automática (o usuário pode corrigir)
   useEffect(() => {
     if (step === 3 && info && mapping.phone === null) {

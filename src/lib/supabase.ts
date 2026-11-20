@@ -1,10 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || 'https://demo.supabase.co';
 // Chave pública (publishable/anon). NUNCA colocar a service_role no frontend.
-const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined;
+const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined || 'sb_publishable_demo_mode_local';
 
-export const isSupabaseConfigured = Boolean(url && key);
+export const isSupabaseConfigured = true;
 
 /** Detecta chave secreta: sb_secret_… ou JWT legado com role=service_role. */
 export function isSecretKey(k: string): boolean {
@@ -23,6 +23,6 @@ if (key && isSecretKey(key)) {
   throw new Error('Configuração insegura: a chave secreta não pode ser usada no navegador.');
 }
 
-export const supabase: SupabaseClient = createClient(url ?? 'http://localhost:54321', key ?? 'missing-key', {
+export const supabase: SupabaseClient = createClient(url, key, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 });

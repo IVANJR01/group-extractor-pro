@@ -1,6 +1,7 @@
 import Papa from 'papaparse';
 import * as XLSX from '@e965/xlsx';
 import { ImportFileError, MAX_ROWS, finalize, type FileKind, type ParsedTable } from './rules';
+import { isWhatsAppChatExport, parseWhatsAppChatExport } from '@/utils/whatsappChatParser';
 
 export * from './rules';
 
@@ -8,6 +9,13 @@ export function parseDelimitedText(text: string): ParsedTable {
   const clean = text.replace(/^﻿/, '');
   if (clean.trim() === '') throw new ImportFileError('O arquivo está vazio.');
   if (/\u0000/.test(clean.slice(0, 2000))) throw new ImportFileError('Arquivo malformado ou binário. Salve como CSV/TXT (UTF-8).');
+
+  if (isWhatsAppChatExport(clean)) {
+    const chat = parseWhatsAppChatExport(clean);
+    const rows = chat.contacts.map((c) => [c.name || 'Participante', c.normalizedPhone || c.rawPhone]);
+    return finalize([['Nome', 'Telefone'], ...rows], [`Conversa do WhatsApp identificada: ${chat.totalUniquePhones} contatos extraídos.`]);
+  }
+
   const res = Papa.parse<string[]>(clean, { skipEmptyLines: 'greedy', delimitersToGuess: [';', ',', '\t', '|'] });
   const fatal = res.errors.filter((e) => e.type === 'Quotes');
   if (fatal.length > 0 && res.data.length === 0) throw new ImportFileError('Arquivo malformado: aspas não fechadas.');

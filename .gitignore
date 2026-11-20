@@ -1,5 +1,7 @@
 node_modules
 dist
+sessions
+sessions/
 .env
 .env.*
 !.env.example
