@@ -608,6 +608,39 @@ class RobotManager {
   clearLogs() {
     this.logs = [];
   }
+
+  // Envia arquivo VCF diretamente para o WhatsApp do usuário para salvar na agenda com 1 toque
+  async sendVcfToMyWhatsApp(chipIndex = 0) {
+    const chip = this.chips[chipIndex];
+    if (!chip || chip.status !== 'connected' || !this.sockets.has(chipIndex)) {
+      throw new Error('Nenhum WhatsApp conectado no robô.');
+    }
+
+    const sock = this.sockets.get(chipIndex);
+    const myJid = sock.user?.id || '';
+    if (!myJid) throw new Error('Identificador do WhatsApp não encontrado.');
+
+    const vcfPath = 'C:\\Users\\ivanj\\Downloads\\contatos_agenda_3mpro.vcf';
+    if (!fs.existsSync(vcfPath)) {
+      throw new Error('Arquivo de agenda contatos_agenda_3mpro.vcf não encontrado em Downloads.');
+    }
+
+    const vcfBuffer = fs.readFileSync(vcfPath);
+
+    this.addLog(`⏳ Enviando arquivo da agenda (.vcf com 553 contatos) para o seu próprio WhatsApp...`, 'info');
+
+    // Envia o documento para o próprio WhatsApp do usuário
+    await sock.sendMessage(myJid, {
+      document: vcfBuffer,
+      fileName: 'contatos_agenda_3mpro.vcf',
+      mimetype: 'text/vcard',
+      caption: '📲 Toque neste arquivo acima no seu WhatsApp e clique em "Salvar / Importar todos" para colocar os 553 contatos na sua agenda em 1 segundo!\n\nDepois que salvar, o WhatsApp permite adicionar todos ao grupo sem nenhuma restrição.',
+    });
+
+    this.addLog(`📲 Sucesso! Arquivo VCF enviado diretamente para o seu WhatsApp (${chip.phone}). Abra o WhatsApp no celular e toque no arquivo para salvar na agenda!`, 'success');
+
+    return { ok: true, phone: chip.phone };
+  }
 }
 
 export const robotManager = new RobotManager();

@@ -372,6 +372,31 @@ export function WhatsAppMultiChipRobot({
   };
 
   const [isLoadingRealList, setIsLoadingRealList] = useState(false);
+  const [isSendingVcf, setIsSendingVcf] = useState(false);
+
+  // Enviar arquivo VCF com 553 contatos direto para o WhatsApp do usuário
+  const handleSendVcfToMyWhatsApp = async () => {
+    setIsSendingVcf(true);
+    try {
+      const res = await fetch('/api/robot/send-vcf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chipIndex: selectedChipIndex }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        toast('📲 Arquivo VCF enviado para o seu WhatsApp! Abra a conversa consigo mesmo no celular e toque nele para salvar na agenda.', 'info');
+        fetchStatus();
+      } else {
+        toast(data.error || 'Erro ao enviar arquivo para o WhatsApp.', 'error');
+      }
+    } catch {
+      toast('Erro de conexão ao enviar arquivo VCF.', 'error');
+    } finally {
+      setIsSendingVcf(false);
+    }
+  };
+
   const handleLoadRealNumbers = async () => {
     setIsLoadingRealList(true);
     try {
@@ -683,22 +708,33 @@ export function WhatsAppMultiChipRobot({
             </div>
           )}
 
-          {/* BANNER PARA CARREGAR LISTA DE TELEFONES REAIS */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-xs">
-            <div className="text-blue-200">
-              <strong className="text-white block mb-0.5">💡 Tem a planilha de colagem com 248 telefones reais?</strong>
-              Carregue a lista com números de telefone reais brasileiros (com DDD) para adicionar diretamente no grupo com 100% de sucesso.
+          {/* BANNER PARA CARREGAR LISTA DE TELEFONES REAIS OU ENVIAR VCF PRO WHATSAPP */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-xs">
+            <div className="text-emerald-200">
+              <strong className="text-white block mb-0.5 text-sm">📲 Salvar 553 Contatos na Agenda do seu Celular (Zero Trabalho Manual):</strong>
+              Clique para enviar o arquivo da agenda (.vcf) direto para o seu WhatsApp. Ao receber no celular, basta dar 1 toque nele para salvar todos os 553 contatos na sua agenda instantaneamente!
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleLoadRealNumbers}
-              disabled={isLoadingRealList}
-              className="border-blue-400/40 bg-blue-950/60 text-blue-200 hover:bg-blue-900/60 hover:text-white shrink-0 gap-1.5 font-bold cursor-pointer"
-            >
-              {isLoadingRealList ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <span>📂</span>}
-              Carregar Telefones Reais (248 contatos)
-            </Button>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <Button
+                size="sm"
+                onClick={handleSendVcfToMyWhatsApp}
+                disabled={isSendingVcf || connectedCount === 0}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 font-bold cursor-pointer shadow-md"
+              >
+                {isSendingVcf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <span>📲</span>}
+                Enviar Agenda (.vcf) pro meu WhatsApp
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleLoadRealNumbers}
+                disabled={isLoadingRealList}
+                className="border-emerald-400/40 bg-slate-900/60 text-emerald-200 hover:bg-slate-800 gap-1.5 font-bold cursor-pointer"
+              >
+                {isLoadingRealList ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <span>📂</span>}
+                Carregar 553 Telefones na Tela
+              </Button>
+            </div>
           </div>
 
           {/* PARÂMETROS E BOTÃO DE EXECUÇÃO */}

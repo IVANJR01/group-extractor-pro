@@ -100,6 +100,13 @@ export default defineConfig({
                     return;
                   }
 
+                  if (pathname === '/send-vcf') {
+                    const result = await (robotManager as any).sendVcfToMyWhatsApp(body.chipIndex ?? 0);
+                    res.statusCode = 200;
+                    res.end(JSON.stringify({ ok: true, ...result }));
+                    return;
+                  }
+
                   res.statusCode = 404;
                   res.end(JSON.stringify({ error: 'Rota não encontrada' }));
                 } catch (err: any) {
