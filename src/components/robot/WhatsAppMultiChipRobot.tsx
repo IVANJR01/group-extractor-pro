@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/contexts/toast';
 import { type SavedContact, saveActiveSession } from '@/services/localExtractorStorage';
+import { normalizeBrazilianPhoneDigits } from '@/utils/phone';
 
 interface ChipData {
   index: number;
@@ -249,21 +250,19 @@ export function WhatsAppMultiChipRobot({
 
     let listToProcess: any[] = [];
 
-    // Se o usuário digitou um número customizado para teste
+    // Se o usuário digitou um número customizado para teste (aceita com ou sem +, com ou sem 55, com ou sem formatação)
     if (customNumber && customNumber.trim()) {
-      let cleanDigits = customNumber.replace(/\D/g, '');
+      const norm = normalizeBrazilianPhoneDigits(customNumber);
+      const cleanDigits = norm.valid ? norm.digits : customNumber.replace(/\D/g, '');
       if (cleanDigits.length < 8) {
         toast('Digite um número válido para o teste.', 'error');
         return;
       }
-      if (cleanDigits.length === 10 || cleanDigits.length === 11) {
-        cleanDigits = '55' + cleanDigits;
-      }
       listToProcess = [{
         name: 'Contato de Teste',
         digits: cleanDigits,
-        phone: cleanDigits,
-        isLid: cleanDigits.length >= 14,
+        phone: norm.formatted || cleanDigits,
+        isLid: false,
       }];
     } else {
       // Processamento de contatos (telefones e LIDs) sem bloquear o usuário
@@ -938,7 +937,7 @@ export function WhatsAppMultiChipRobot({
                 </span>
                 <input
                   type="text"
-                  placeholder="Ex: 4398370727 ou 554398370727"
+                  placeholder="Ex: (43) 98837-0727 ou +55 43 98837-0727 ou 5543988370727"
                   value={customTestPhone}
                   onChange={(e) => setCustomTestPhone(e.target.value)}
                   disabled={activeTask?.isRunning}
