@@ -1,4 +1,4 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import fs from 'fs';
@@ -88,6 +88,17 @@ class RobotManager {
 
     const chip = this.chips[chipIndex];
     const sessionDir = path.join(SESSIONS_DIR, `chip_${chipIndex}`);
+
+    // Se vai usar pairing code, LIMPAR sessão antiga para evitar conflito de creds corrompido
+    if (targetPhoneNumber) {
+      try {
+        if (fs.existsSync(sessionDir)) {
+          fs.rmSync(sessionDir, { recursive: true, force: true });
+          this.addLog(`🧹 Sessão antiga do ${chip.name} removida para nova conexão por código.`, 'info');
+        }
+      } catch {}
+    }
+
     if (!fs.existsSync(sessionDir)) {
       fs.mkdirSync(sessionDir, { recursive: true });
     }
@@ -109,11 +120,23 @@ class RobotManager {
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
+    // Buscar a versão mais recente do protocolo WhatsApp para evitar rejeição
+    let waVersion;
+    try {
+      const { version } = await fetchLatestBaileysVersion();
+      waVersion = version;
+      this.addLog(`📡 Usando WhatsApp Web v${version.join('.')}`, 'info');
+    } catch {
+      waVersion = undefined; // usa o default do Baileys
+    }
+
     const sock = makeWASocket({
       auth: state,
+      version: waVersion,
       logger: pino({ level: 'silent' }),
       printQRInTerminal: false,
-      browser: ['Group Extractor Pro', 'Chrome', '124.0.0'],
+      // Browser fingerprint confiável - Ubuntu/Chrome evita bloqueio pelo WhatsApp
+      browser: ['Ubuntu', 'Chrome', '22.04.4'],
       syncFullHistory: false,
       connectTimeoutMs: 60000,
     });
@@ -182,8 +205,9 @@ class RobotManager {
         cleanPhone = '55' + cleanPhone;
       }
       chip.status = 'connecting';
-      // Aguarda o socket estabelecer o canal inicial com o WhatsApp
-      await new Promise((r) => setTimeout(r, 2000));
+      // Aguarda 5 segundos para o socket estabelecer o handshake completo com o WhatsApp
+      this.addLog(`⏳ Aguardando handshake com servidor WhatsApp para ${cleanPhone}...`, 'info');
+      await new Promise((r) => setTimeout(r, 5000));
       try {
         const code = await sock.requestPairingCode(cleanPhone);
         chip.pairingCode = code;
