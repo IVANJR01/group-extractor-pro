@@ -13,6 +13,7 @@ import {
   Copy,
   Loader2,
   Plug,
+  Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -385,6 +386,16 @@ export function WhatsAppMultiChipRobot({
 
         {/* CORPO DO CARD DO CHIP SELECIONADO */}
         <CardContent className="p-6 space-y-6">
+          {typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && (
+            <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-xs text-blue-200 flex items-start gap-2.5">
+              <Info className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold text-white block mb-0.5">💡 Acessando a Versão em Nuvem (Vercel)</span>
+                O Robô Multi-Chip WhatsApp (Baileys) roda diretamente no seu computador para usar sua conexão local e proteger seus chips contra restrições de IP de nuvem. Para conectar os WhatsApps e rodar as adições automáticas, abra o sistema com o <code>iniciar.bat</code> ou acesse <strong>http://localhost:5173/</strong>.
+              </div>
+            </div>
+          )}
+
           {/* SE O CHIP ATUAL ESTÁ CONECTADO */}
           {activeChip.status === 'connected' ? (
             <div className="p-8 rounded-2xl bg-slate-900/80 border border-slate-800 text-center space-y-3">
