@@ -201,16 +201,34 @@ export default defineConfig({
               const phone = parts[1] || '';
               let digits = (parts[2] || phone).replace(/\D/g, '');
 
-              // Garante que é número de telefone real BR (10 a 13 dígitos)
-              if (digits.length === 10 || digits.length === 11) {
-                digits = '55' + digits;
+              // Normaliza para o padrão nacional do Brasil com nono dígito (9)
+              let local = digits;
+              if (local.startsWith('55') && (local.length === 12 || local.length === 13 || local.length === 10 || local.length === 11)) {
+                local = local.slice(2);
               }
 
-              if (digits.length >= 12 && digits.length <= 13 && digits.startsWith('55') && !uniqueMap.has(digits)) {
+              if (local.length === 8) {
+                // Se faltar o DDD, não dá pra inventar
+                continue;
+              } else if (local.length === 10) {
+                // DDD + 8 dígitos -> insere 55 e o 9
+                const ddd = local.slice(0, 2);
+                const rest = local.slice(2);
+                digits = `55${ddd}9${rest}`;
+              } else if (local.length === 11) {
+                // DDD + 9 dígitos -> adiciona 55
+                digits = `55${local}`;
+              } else if (local.length === 12 && digits.startsWith('55')) {
+                const ddd = digits.slice(2, 4);
+                const rest = digits.slice(4);
+                digits = `55${ddd}9${rest}`;
+              }
+
+              if (digits.length === 13 && digits.startsWith('55') && !uniqueMap.has(digits)) {
                 uniqueMap.add(digits);
                 contacts.push({
                   name: !/^(não|nao|sim|admin|membro|\d+)$/i.test(name) ? name : '',
-                  phone: phone || `+${digits}`,
+                  phone: `+${digits}`,
                   digits,
                   isAdmin: false,
                   invited: false,

@@ -349,11 +349,24 @@ class RobotManager {
 
       let isLid = false;
 
-      // Classifica se é telefone BR ou LID de privacidade
-      if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
+      // Classifica se é telefone BR ou LID de privacidade, garantindo o Nono Dígito (9)
+      if (digits.length === 10) {
+        // DDD + 8 dígitos (sem 9) -> insere 55 e o 9
+        const ddd = digits.slice(0, 2);
+        const rest = digits.slice(2);
+        digits = `55${ddd}9${rest}`;
         phoneCount++;
-      } else if (digits.length === 10 || digits.length === 11) {
+      } else if (digits.length === 11) {
+        // DDD + 9 dígitos -> adiciona 55
         digits = '55' + digits;
+        phoneCount++;
+      } else if (digits.length === 12 && digits.startsWith('55')) {
+        // 55 + DDD + 8 dígitos -> insere o nono dígito 9
+        const ddd = digits.slice(2, 4);
+        const rest = digits.slice(4);
+        digits = `55${ddd}9${rest}`;
+        phoneCount++;
+      } else if (digits.length === 13 && digits.startsWith('55')) {
         phoneCount++;
       } else if (digits.length >= 14) {
         isLid = true;
