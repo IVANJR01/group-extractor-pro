@@ -220,11 +220,13 @@ export function DashboardPage() {
           for (const cell of row) {
             const str = String(cell || '').trim();
             const digits = str.replace(/\D/g, '');
-            if (digits.length >= 8 && digits.length <= 15 && !phone) {
+            if (digits.length >= 10 && digits.length <= 13 && !phone) {
               phone = digits;
-            } else if (/admin|sim|true/i.test(str)) {
+            } else if (/^(admin|sim|true)$/i.test(str)) {
               isAdmin = true;
-            } else if (!name && isNaN(Number(str)) && str.length > 1) {
+            } else if (/^(não|nao|false|membro)$/i.test(str)) {
+              isAdmin = false;
+            } else if (!name && isNaN(Number(str)) && str.length > 1 && !/^(sim|não|nao|true|false|admin|membro)$/i.test(str)) {
               name = str;
             }
           }
