@@ -499,64 +499,57 @@ class RobotManager {
       const isLid = contact.isLid || contact.digits.length >= 14;
 
       if (isLid) {
-        // Contatos com ID de privacidade mascarado (LID):
-        // Grupos comuns do WhatsApp rejeitam 'add' direto de LIDs com bad-request.
-        // O robô envia o link de convite do grupo por mensagem privada para o LID com segurança!
-        try {
-          this.addLog(`✉️ [${selectedChip.name} • ${selectedChip.phone || 'Ativo'}] Enviando convite no privado para ${displayName} (ID de privacidade)...`, 'info');
-          const inviteUrl = this.activeTask.inviteUrl || (this.activeTask.inviteCode ? `https://chat.whatsapp.com/${this.activeTask.inviteCode}` : '');
-          const inviteMsg = `Olá! Você foi convidado(a) para participar do nosso grupo *${this.activeTask.groupName}*:\n\n${inviteUrl || 'Acesse o grupo pelo link oficial.'}`;
+        // LIDs são identificadores de privacidade do WhatsApp. O WhatsApp não permite interação
+        // direta com LIDs sem que a pessoa esteja na agenda, e derruba a sessão se tentar forçar.
+        // Ignoramos com segurança para manter a conexão estável.
+        this.activeTask.failedCount++;
+        this.addLog(
+          `⚠️ [${selectedChip.name}] ${displayName}: Ignorado por segurança (ID de privacidade LID). Adicione contatos com números de telefone reais (10 a 13 dígitos) para entrar no grupo.`,
+          'warning'
+        );
+        continue;
+      }
 
-          await sock.sendMessage(`${contact.digits}@lid`, { text: inviteMsg });
+      // Contatos com número de telefone real (10 a 13 dígitos):
+      const cleanDigits = contact.digits.length <= 11 ? '55' + contact.digits : contact.digits;
+      const participantJid = `${cleanDigits}@s.whatsapp.net`;
+
+      try {
+        this.addLog(`🔄 [${selectedChip.name} • ${selectedChip.phone || 'Ativo'}] Adicionando ${displayName}...`, 'info');
+
+        let statusCode = '200';
+        const result = await sock.groupParticipantsUpdate(groupJid, [participantJid], 'add');
+        const resInfo = Array.isArray(result) ? result[0] : result;
+        statusCode = String(resInfo?.status || resInfo?.[participantJid]?.code || '200');
+
+        if (statusCode === '200') {
           selectedChip.addedToday++;
           this.activeTask.successCount++;
-          this.addLog(`✅ [${selectedChip.name}] Convite enviado com sucesso no privado para ${displayName}! (${selectedChip.addedToday}/${dailyLimitPerChip} hoje)`, 'success');
-        } catch (lidErr) {
+          this.addLog(`✅ [${selectedChip.name}] ${displayName} adicionado(a) com sucesso ao grupo! (${selectedChip.addedToday}/${dailyLimitPerChip} hoje)`, 'success');
+        } else if (statusCode === '403') {
+          // Usuário com privacidade restrita: o WhatsApp envia convite no privado automaticamente
+          selectedChip.addedToday++;
+          this.activeTask.successCount++;
+          this.addLog(`✉️ [${selectedChip.name}] ${displayName}: Privacidade restrita; convite direto enviado no privado pelo WhatsApp.`, 'info');
+        } else if (statusCode === '409') {
+          this.addLog(`ℹ️ [${selectedChip.name}] ${displayName} já está no grupo.`, 'info');
+        } else if (statusCode === '404') {
           this.activeTask.failedCount++;
-          this.addLog(`⚠️ [${selectedChip.name}] ${displayName}: Não foi possível enviar convite para o LID (${lidErr.message || 'Privacidade restrita'}).`, 'warning');
+          this.addLog(`⚠️ [${selectedChip.name}] ${displayName}: Número inexistente ou não registrado no WhatsApp (Código 404).`, 'warning');
+        } else {
+          this.activeTask.failedCount++;
+          this.addLog(`⚠️ [${selectedChip.name}] Falha ao adicionar ${displayName} (Código ${statusCode}).`, 'warning');
         }
-      } else {
-        // Contatos com número de telefone real (10 a 13 dígitos):
-        const cleanDigits = contact.digits.length <= 11 ? '55' + contact.digits : contact.digits;
-        const participantJid = `${cleanDigits}@s.whatsapp.net`;
-
-        try {
-          this.addLog(`🔄 [${selectedChip.name} • ${selectedChip.phone || 'Ativo'}] Adicionando ${displayName}...`, 'info');
-
-          let statusCode = '200';
-          const result = await sock.groupParticipantsUpdate(groupJid, [participantJid], 'add');
-          const resInfo = Array.isArray(result) ? result[0] : result;
-          statusCode = String(resInfo?.status || resInfo?.[participantJid]?.code || '200');
-
-          if (statusCode === '200') {
-            selectedChip.addedToday++;
-            this.activeTask.successCount++;
-            this.addLog(`✅ [${selectedChip.name}] ${displayName} adicionado(a) com sucesso ao grupo! (${selectedChip.addedToday}/${dailyLimitPerChip} hoje)`, 'success');
-          } else if (statusCode === '403') {
-            // Usuário com privacidade restrita: o WhatsApp envia convite no privado automaticamente
-            selectedChip.addedToday++;
-            this.activeTask.successCount++;
-            this.addLog(`✉️ [${selectedChip.name}] ${displayName}: Privacidade restrita; convite direto enviado no privado pelo WhatsApp.`, 'info');
-          } else if (statusCode === '409') {
-            this.addLog(`ℹ️ [${selectedChip.name}] ${displayName} já está no grupo.`, 'info');
-          } else if (statusCode === '404') {
-            this.activeTask.failedCount++;
-            this.addLog(`⚠️ [${selectedChip.name}] ${displayName}: Número inexistente ou não registrado no WhatsApp (Código 404).`, 'warning');
-          } else {
-            this.activeTask.failedCount++;
-            this.addLog(`⚠️ [${selectedChip.name}] Falha ao adicionar ${displayName} (Código ${statusCode}).`, 'warning');
-          }
-        } catch (err) {
-          this.activeTask.failedCount++;
-          const msg = String(err.message || err);
-          if (msg.includes('bad-request')) {
-            this.addLog(
-              `❌ [${selectedChip.name}] O WhatsApp recusou a requisição direta de ${displayName} (bad-request).`,
-              'error'
-            );
-          } else {
-            this.addLog(`❌ [${selectedChip.name}] Erro ao adicionar ${displayName}: ${msg}`, 'error');
-          }
+      } catch (err) {
+        this.activeTask.failedCount++;
+        const msg = String(err.message || err);
+        if (msg.includes('bad-request')) {
+          this.addLog(
+            `❌ [${selectedChip.name}] O WhatsApp recusou a adição de ${displayName} (bad-request).`,
+            'error'
+          );
+        } else {
+          this.addLog(`❌ [${selectedChip.name}] Erro ao adicionar ${displayName}: ${msg}`, 'error');
         }
       }
 

@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/contexts/toast';
-import type { SavedContact } from '@/services/localExtractorStorage';
+import { type SavedContact, saveActiveSession } from '@/services/localExtractorStorage';
 
 interface ChipData {
   index: number;
@@ -371,6 +371,35 @@ export function WhatsAppMultiChipRobot({
     }
   };
 
+  const [isLoadingRealList, setIsLoadingRealList] = useState(false);
+  const handleLoadRealNumbers = async () => {
+    setIsLoadingRealList(true);
+    try {
+      const res = await fetch('/api/load-colagem-contacts');
+      const data = await res.json();
+      if (res.ok && data.contacts && data.contacts.length > 0) {
+        saveActiveSession({
+          groupName: data.groupName || 'Colagem WhatsApp (Telefones Reais)',
+          totalContacts: data.contacts.length,
+          contacts: data.contacts,
+          destinationGroup: {
+            name: destinationName || '3MPRO #001',
+            inviteUrl: destinationUrl || 'https://chat.whatsapp.com/Czqp9FJaYnc85U2eXnuKJN',
+          },
+          lastUpdated: new Date().toISOString(),
+        });
+        toast(`✅ ${data.contacts.length} telefones reais carregados da colagem! Atualizando tela...`, 'info');
+        setTimeout(() => window.location.reload(), 800);
+      } else {
+        toast('Arquivo de telefones reais não encontrado em Downloads.', 'error');
+      }
+    } catch {
+      toast('Erro ao carregar lista de telefones reais.', 'error');
+    } finally {
+      setIsLoadingRealList(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedCode(true);
@@ -653,6 +682,24 @@ export function WhatsAppMultiChipRobot({
               )}
             </div>
           )}
+
+          {/* BANNER PARA CARREGAR LISTA DE TELEFONES REAIS */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-xs">
+            <div className="text-blue-200">
+              <strong className="text-white block mb-0.5">💡 Tem a planilha de colagem com 248 telefones reais?</strong>
+              Carregue a lista com números de telefone reais brasileiros (com DDD) para adicionar diretamente no grupo com 100% de sucesso.
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleLoadRealNumbers}
+              disabled={isLoadingRealList}
+              className="border-blue-400/40 bg-blue-950/60 text-blue-200 hover:bg-blue-900/60 hover:text-white shrink-0 gap-1.5 font-bold cursor-pointer"
+            >
+              {isLoadingRealList ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <span>📂</span>}
+              Carregar Telefones Reais (248 contatos)
+            </Button>
+          </div>
 
           {/* PARÂMETROS E BOTÃO DE EXECUÇÃO */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 p-4 bg-muted/40 rounded-xl border">

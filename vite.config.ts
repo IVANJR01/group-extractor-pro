@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath, URL } from 'node:url';
+import fs from 'node:fs';
 
 let pendingExtractedData: unknown = null;
 
@@ -166,6 +167,55 @@ export default defineConfig({
             }
             res.end(JSON.stringify(dataToSend || null));
             return;
+          }
+        });
+
+        // Rota auxiliar para carregar contatos de telefone reais salvos da colagem
+        server.middlewares.use('/api/load-colagem-contacts', (_req, res) => {
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json');
+
+          const colagemPath = 'C:\\Users\\ivanj\\Downloads\\contatos_colagem_whatsapp.csv';
+          if (!fs.existsSync(colagemPath)) {
+            res.statusCode = 404;
+            res.end(JSON.stringify({ error: 'Arquivo de colagem não encontrado' }));
+            return;
+          }
+
+          try {
+            const content = fs.readFileSync(colagemPath, 'utf8');
+            const lines = content.split(/\r?\n/).filter(Boolean);
+            const contacts: any[] = [];
+            const uniqueMap = new Set();
+
+            for (let i = 1; i < lines.length; i++) {
+              const parts = lines[i].split(';').map((p: string) => p.replace(/^"|"$/g, '').trim());
+              const name = parts[0] || '';
+              const phone = parts[1] || '';
+              let digits = (parts[2] || phone).replace(/\D/g, '');
+
+              // Garante que é número de telefone real BR (10 a 13 dígitos)
+              if (digits.length === 10 || digits.length === 11) {
+                digits = '55' + digits;
+              }
+
+              if (digits.length >= 12 && digits.length <= 13 && digits.startsWith('55') && !uniqueMap.has(digits)) {
+                uniqueMap.add(digits);
+                contacts.push({
+                  name: !/^(não|nao|sim|admin|membro|\d+)$/i.test(name) ? name : '',
+                  phone: phone || `+${digits}`,
+                  digits,
+                  isAdmin: false,
+                  invited: false,
+                });
+              }
+            }
+
+            res.statusCode = 200;
+            res.end(JSON.stringify({ ok: true, groupName: 'Colagem WhatsApp (Telefones Reais)', contacts }));
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: err.message }));
           }
         });
       },
