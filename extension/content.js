@@ -850,9 +850,12 @@
       const c = contacts[i];
       const cleanDigits = (c.digits || '').replace(/\D/g, '');
       const ddd = cleanDigits.startsWith('55') ? cleanDigits.slice(2, 4) : cleanDigits.slice(0, 2);
+      const sub = cleanDigits.startsWith('55') ? cleanDigits.slice(4) : cleanDigits.slice(2);
       const name = c.name?.trim() ? c.name.trim() : `Lead #${String(i + 1).padStart(3, '0')} (${ddd})`;
-      const phone = cleanDigits ? `+${cleanDigits}` : (c.formatted || '');
-      const notes = `Grupo: ${groupName} | Admin: ${c.isAdmin ? 'Sim' : 'Não'} | Digitos: ${cleanDigits}`;
+      // Formato nacional limpo para o Google Contatos: (DD) 9XXXX-XXXX
+      // O Google Contatos associa a bandeira 🇧🇷 sem duplicar o texto "+55" dentro do campo
+      const phone = sub.length === 9 ? `(${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : (cleanDigits ? `+${cleanDigits}` : '');
+      const notes = `Grupo: ${groupName} | Admin: ${c.isAdmin ? 'Sim' : 'Não'}`;
       rows.push([name, name, `(${ddd})`, `* myContacts ::: ${groupName}`, 'Mobile', phone, notes]);
     }
 

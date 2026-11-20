@@ -233,10 +233,13 @@ export function generateGoogleContactsCSV(contacts: SavedContact[], label: strin
     const norm = normalizeBrazilianPhoneDigits(c.digits || c.phone);
     const cleanDigits = norm.valid ? norm.digits : c.digits.replace(/\D/g, '');
     const ddd = cleanDigits.startsWith('55') ? cleanDigits.slice(2, 4) : cleanDigits.slice(0, 2);
+    const sub = cleanDigits.startsWith('55') ? cleanDigits.slice(4) : cleanDigits.slice(2);
     const givenName = c.name?.trim() ? c.name.trim() : `Lead #${String(i + 1).padStart(3, '0')}`;
     const familyName = `(${ddd})`;
     const fullName = `${givenName} ${familyName}`;
-    const phone = `+${cleanDigits}`;
+    // Formato nacional limpo para o Google Contatos: (DD) 9XXXX-XXXX
+    // O Google Contatos associa a bandeira 🇧🇷 sem duplicar o texto "+55" dentro do campo
+    const phone = sub.length === 9 ? `(${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : `+${cleanDigits}`;
     rows.push([fullName, givenName, familyName, `* myContacts ::: ${label}`, 'Mobile', phone]);
   });
 
