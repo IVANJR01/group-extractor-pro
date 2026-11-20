@@ -1,15 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Group Extractor Pro - WhatsApp",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Extraia participantes do WhatsApp Web, remova administradores e envie direto para o Group Extractor Pro com 1 clique.",
   "permissions": [
     "activeTab",
     "storage"
   ],
   "host_permissions": [
-    "https://web.whatsapp.com/*"
+    "https://web.whatsapp.com/*",
+    "http://localhost:5173/*",
+    "http://127.0.0.1:5173/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_title": "Group Extractor Pro"
@@ -25,8 +30,7 @@
       "css": [
         "content.css"
       ],
-      "run_at": "document_idle",
-      "world": "MAIN"
+      "run_at": "document_idle"
     }
   ]
 }

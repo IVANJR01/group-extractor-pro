@@ -77,18 +77,92 @@
 
   function cleanPhoneNumber(raw) {
     if (!raw) return '';
-    return String(raw).replace(/@.*$/, '').replace(/\D/g, '');
+    let digits = String(raw).replace(/@.*$/, '').replace(/\D/g, '');
+
+    // Descartar LIDs (14-15 dígitos que não começam com 55 ou são identificadores criptográficos)
+    if (digits.length >= 14 && !digits.startsWith('55')) return '';
+
+    // Normalização brasileira inteligente (Injeção automática do 9º dígito)
+    if (digits.startsWith('55')) {
+      const national = digits.slice(2);
+      // 10 dígitos nacionais = 2 dígitos de DDD + 8 dígitos de assinante (ex: 54 8103-1641)
+      if (national.length === 10) {
+        const ddd = national.slice(0, 2);
+        const sub = national.slice(2);
+        // Celulares no Brasil iniciam com 6, 7, 8 ou 9
+        if (/^[6-9]/.test(sub)) {
+          digits = `55${ddd}9${sub}`;
+        }
+      }
+    } else {
+      // Sem código de país 55
+      if (digits.length === 10) {
+        const ddd = digits.slice(0, 2);
+        const sub = digits.slice(2);
+        if (/^[6-9]/.test(sub)) {
+          digits = `55${ddd}9${sub}`;
+        } else {
+          digits = `55${digits}`;
+        }
+      } else if (digits.length === 11) {
+        digits = `55${digits}`;
+      }
+    }
+
+    return digits;
   }
 
   function formatPhoneDisplay(digits) {
     if (!digits) return '';
-    if (digits.startsWith('55') && digits.length >= 12) {
+    if (digits.startsWith('55') && digits.length === 13) {
       const ddd = digits.slice(2, 4);
-      const rest = digits.slice(4);
-      return rest.length === 9 ? `+55 (${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}` : `+55 (${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
+      return `+55 (${ddd}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+    }
+    if (digits.startsWith('55') && digits.length === 12) {
+      const ddd = digits.slice(2, 4);
+      return `+55 (${ddd}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
     }
     if (digits.length >= 10) return `+${digits}`;
     return digits;
+  }
+
+  function extractPhoneFromRow(row) {
+    const text = row.textContent || '';
+    // 1. Procura número com '+' (padrão nativo do WhatsApp para membros que não estão na agenda)
+    const plusMatch = text.match(/\+\s*\d{1,3}[\d\s().-]{7,25}\d/);
+    if (plusMatch) return plusMatch[0].trim();
+
+    // 2. Procura em atributos title de spans
+    for (const el of row.querySelectorAll('span[title], div[title]')) {
+      const title = (el.getAttribute('title') || '').trim();
+      if (title.startsWith('+') || /^\d{10,13}$/.test(title.replace(/\D/g, ''))) {
+        return title;
+      }
+    }
+
+    // 3. Procura padrão brasileiro geral com DDD
+    const brMatch = text.match(/(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\s?)?\d{4,5}[-\s]?\d{4}/);
+    if (brMatch) return brMatch[0].trim();
+
+    return '';
+  }
+
+  function extractNameFromRow(row, rawPhone, digits) {
+    // 1. Procura span com apelido / recado (começa com ~)
+    for (const span of row.querySelectorAll('span[title], span[dir="auto"], span')) {
+      const t = (span.getAttribute('title') || span.textContent || '').trim();
+      if (t.startsWith('~') && t.length > 1) {
+        return cleanName(t.slice(1).trim(), digits);
+      }
+    }
+    // 2. Qualquer span que não seja telefone nem admin
+    for (const span of row.querySelectorAll('span[title], span[dir="auto"]')) {
+      const t = (span.getAttribute('title') || span.textContent || '').trim();
+      if (t && !t.includes('+') && !t.includes('Admin') && !t.includes('membro') && !rawPhone.includes(t) && t.length > 1) {
+        return cleanName(t.startsWith('~') ? t.slice(1).trim() : t, digits);
+      }
+    }
+    return '';
   }
 
   function cleanName(name, digits) {
@@ -99,7 +173,7 @@
     return n;
   }
 
-  // TÉCNICA 1: Tentar extrair do React Fiber / Memória
+  // TÉCNICA 1: Tentar extrair do React Fiber / Memória (Apenas números reais c.us)
   function extractFromMemory() {
     try {
       const candidates = [
@@ -144,7 +218,7 @@
     return null;
   }
 
-  // TÉCNICA 2: Abrir Pesquisar Membros e rolar lista no painel
+  // TÉCNICA 2: Abrir Pesquisar Membros e rolar lista no painel visual (FONTE DA VERDADE)
   async function extractDeepFromDrawerDOM(totalExpected, onProgress) {
     const contactsMap = new Map();
     const header = document.querySelector('#main header, div[data-testid="conversation-header"], header');
@@ -156,28 +230,30 @@
       drawer = document.querySelector('div[data-testid="chat-info-drawer"], div[tabindex="-1"]');
     }
 
-    if (!drawer) return [];
-
     onProgress(0, totalExpected, 'Abrindo lista de participantes...');
 
-    const buttons = drawer.querySelectorAll('div[role="button"], span[role="button"], button');
-    for (const btn of buttons) {
-      const text = btn.textContent || '';
-      const title = btn.getAttribute('title') || '';
-      if (/pesquisar/i.test(title) || /pesquisar/i.test(text) || (/ver todos|ver tudo|membros/i.test(text) && /\d+/.test(text))) {
-        btn.click();
-        await new Promise(r => setTimeout(r, 600));
-        break;
+    let activeModal = document.querySelector('div[data-animate-modal-popup="true"], div[role="dialog"]');
+    if (!activeModal && drawer) {
+      const buttons = drawer.querySelectorAll('div[role="button"], span[role="button"], button');
+      for (const btn of buttons) {
+        const text = btn.textContent || '';
+        const title = btn.getAttribute('title') || '';
+        if (/pesquisar/i.test(title) || /pesquisar/i.test(text) || (/ver todos|ver tudo|membros/i.test(text) && /\d+/.test(text))) {
+          btn.click();
+          await new Promise(r => setTimeout(r, 600));
+          break;
+        }
       }
+      activeModal = document.querySelector('div[data-animate-modal-popup="true"], div[role="dialog"]');
     }
 
-    const activeModal = document.querySelector('div[data-animate-modal-popup="true"], div[role="dialog"]');
     const scrollTarget = activeModal || drawer;
+    if (!scrollTarget) return [];
 
     let listScroll = scrollTarget;
     for (const d of scrollTarget.querySelectorAll('div')) {
       const s = window.getComputedStyle(d);
-      if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && d.scrollHeight > d.clientHeight) {
+      if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && d.scrollHeight > d.clientHeight + 50) {
         listScroll = d;
         break;
       }
@@ -186,30 +262,22 @@
     let noNewCount = 0;
     let prevCount = 0;
 
-    for (let i = 0; i < 250; i++) {
+    for (let i = 0; i < 350; i++) {
       if (abortExtraction) break;
 
-      const rows = (activeModal || drawer).querySelectorAll('div[role="listitem"], div[data-testid="cell-frame-container"]');
+      const rows = (activeModal || drawer || document.body).querySelectorAll('div[role="listitem"], div[data-testid="cell-frame-container"]');
       for (const row of rows) {
         const text = row.textContent || '';
         const isAdmin = /admin/i.test(text);
-        const phoneMatch = text.match(/(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\s?)?\d{4}[-\s]?\d{4}/);
-        let digits = phoneMatch ? cleanPhoneNumber(phoneMatch[0]) : '';
+        const rawPhone = extractPhoneFromRow(row);
+        const digits = cleanPhoneNumber(rawPhone);
 
-        let name = '';
-        for (const tn of row.querySelectorAll('span[title], span[dir="auto"]')) {
-          const val = (tn.getAttribute('title') || tn.textContent || '').trim();
-          if (val && !val.includes(phoneMatch ? phoneMatch[0] : '___')) {
-            name = cleanName(val, digits);
-            if (name) break;
-          }
-        }
-
-        if (digits.length >= 8 && digits.length <= 15) {
+        if (digits && digits.length >= 10 && digits.length <= 13) {
+          const name = extractNameFromRow(row, rawPhone, digits);
           if (!contactsMap.has(digits)) {
             contactsMap.set(digits, {
               name,
-              rawPhone: phoneMatch ? phoneMatch[0] : digits,
+              rawPhone,
               digits,
               formatted: formatPhoneDisplay(digits),
               isAdmin
@@ -225,14 +293,16 @@
       if (totalExpected > 0 && contactsMap.size >= totalExpected) break;
 
       if (contactsMap.size === prevCount) {
-        if (++noNewCount >= 10) break;
+        if (++noNewCount >= 14) break;
       } else {
         noNewCount = 0;
         prevCount = contactsMap.size;
       }
 
-      listScroll.scrollTop += 600;
-      await new Promise(r => setTimeout(r, 120));
+      if (listScroll) {
+        listScroll.scrollTop += 600;
+      }
+      await new Promise(r => setTimeout(r, 130));
     }
 
     return Array.from(contactsMap.values());
@@ -248,7 +318,7 @@
         const results = [];
         for (const item of t.split(/[,;]+/)) {
           const digits = cleanPhoneNumber(item);
-          if (digits.length >= 8 && digits.length <= 15) {
+          if (digits && digits.length >= 10 && digits.length <= 13) {
             results.push({ name: '', rawPhone: item, digits, formatted: formatPhoneDisplay(digits), isAdmin: false });
           }
         }
@@ -272,52 +342,49 @@
     try {
       let finalContacts = [];
 
-      // 1. Tentar ler da memória React Fiber
-      const memoryResult = extractFromMemory();
-      if (memoryResult && memoryResult.list?.length > 0) {
-        if (memoryResult.groupName) groupName = memoryResult.groupName;
-        const map = new Map();
-        for (const item of memoryResult.list) {
-          let rawPhone = '';
+      // 1. Prioridade 1: Varredura visual profunda do DOM (lê telefones reais visíveis na tela)
+      const domContacts = await extractDeepFromDrawerDOM(totalExpected, (current, total, statusText) => {
+        updateModalProgress(current, total, statusText);
+      });
 
-          // Prioriza campos de número real (Phone Number) e descarta LIDs
-          if (item.phoneNumber) {
-            rawPhone = item.phoneNumber;
-          } else if (item.pnJid) {
-            rawPhone = typeof item.pnJid === 'object' ? (item.pnJid.user || '') : item.pnJid;
-          } else if (item.contact?.phoneNumber) {
-            rawPhone = item.contact.phoneNumber;
-          } else if (item.contact?.id && (item.contact.id.server === 'c.us' || !String(item.contact.id.server || '').includes('lid'))) {
-            rawPhone = typeof item.contact.id === 'object' ? item.contact.id.user : item.contact.id;
-          } else if (item.id && (item.id.server === 'c.us' || (!String(item.id.server || '').includes('lid') && !String(item.id._serialized || '').includes('@lid')))) {
-            rawPhone = typeof item.id === 'object' ? item.id.user : item.id;
-          }
-
-          const digits = cleanPhoneNumber(rawPhone);
-          // Números de telefone reais têm entre 10 e 13 dígitos. LIDs de 14-15 dígitos são descartados
-          const isLid = digits.length >= 14 && !digits.startsWith('55');
-          if (digits.length >= 10 && digits.length <= 13 && !isLid) {
-            const isAdmin = Boolean(item.isAdmin || item.isSuperAdmin || item.role === 'admin');
-            const c = item.contact || {};
-            const name = cleanName(c.name || c.pushname || c.formattedName || item.displayName || item.name || '', digits);
-            map.set(digits, { name, rawPhone: digits, digits, formatted: formatPhoneDisplay(digits), isAdmin });
-          }
-        }
-        if (map.size > 0) {
-          finalContacts = Array.from(map.values());
-        }
+      if (domContacts && domContacts.length > 0) {
+        finalContacts = domContacts;
       }
 
-      // 2. Se a memória não pegou todos, usa a varredura do DOM com auto-scroll
+      // 2. Se o DOM pegou menos que o esperado, complementar com contatos reais da memória (sem LIDs!)
       if (finalContacts.length < (totalExpected || 30)) {
-        const domContacts = await extractDeepFromDrawerDOM(totalExpected, (current, total, statusText) => {
-          updateModalProgress(current, total, statusText);
-        });
+        const memoryResult = extractFromMemory();
+        if (memoryResult && memoryResult.list?.length > 0) {
+          if (memoryResult.groupName && !groupName) groupName = memoryResult.groupName;
+          const map = new Map();
+          for (const c of finalContacts) map.set(c.digits, c);
 
-        const map = new Map();
-        for (const c of finalContacts) map.set(c.digits, c);
-        for (const c of domContacts) map.set(c.digits, c);
-        finalContacts = Array.from(map.values());
+          for (const item of memoryResult.list) {
+            let rawPhone = '';
+            if (item.phoneNumber) {
+              rawPhone = item.phoneNumber;
+            } else if (item.pnJid) {
+              const jidStr = typeof item.pnJid === 'object' ? (item.pnJid.user || '') : String(item.pnJid || '');
+              if (!jidStr.includes('lid')) rawPhone = jidStr;
+            } else if (item.contact?.phoneNumber) {
+              rawPhone = item.contact.phoneNumber;
+            } else if (item.contact?.id && (item.contact.id.server === 'c.us' || !String(item.contact.id.server || '').includes('lid'))) {
+              const idStr = String(item.contact.id._serialized || item.contact.id.user || '');
+              if (!idStr.includes('lid')) rawPhone = typeof item.contact.id === 'object' ? item.contact.id.user : item.contact.id;
+            }
+
+            const digits = cleanPhoneNumber(rawPhone);
+            if (digits && digits.length >= 10 && digits.length <= 13) {
+              const isAdmin = Boolean(item.isAdmin || item.isSuperAdmin || item.role === 'admin');
+              const c = item.contact || {};
+              const name = cleanName(c.name || c.pushname || c.formattedName || item.displayName || item.name || '', digits);
+              if (!map.has(digits)) {
+                map.set(digits, { name, rawPhone: digits, digits, formatted: formatPhoneDisplay(digits), isAdmin });
+              }
+            }
+          }
+          finalContacts = Array.from(map.values());
+        }
       }
 
       // 3. Fallback
@@ -345,11 +412,31 @@
   }
 
   function syncWithLocalApp(groupName, contacts, totalExpected) {
+    const payload = { groupName, contacts, totalExpected };
+
+    // 1. Envio via Background Service Worker (100% imune ao CSP do WhatsApp Web)
+    if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.sendMessage === 'function') {
+      try {
+        chrome.runtime.sendMessage({ action: 'sync_with_local_app', data: payload }, () => {
+          if (chrome.runtime.lastError) {
+            fallbackSync(payload);
+          }
+        });
+        return;
+      } catch (e) {
+        fallbackSync(payload);
+      }
+    } else {
+      fallbackSync(payload);
+    }
+  }
+
+  function fallbackSync(payload) {
     try {
       fetch('http://localhost:5173/api/extracted-contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupName, contacts, totalExpected })
+        body: JSON.stringify(payload)
       }).catch(() => {});
     } catch (e) {}
   }

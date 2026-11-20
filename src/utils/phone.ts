@@ -72,14 +72,17 @@ function classifyBrazilian(original: string, national: string, issues: string[])
   }
 
   if (subscriber.length === 8 && /^[6-9]/.test(subscriber)) {
+    const fullNational = `${areaCode}9${subscriber}`;
+    const normalized = `+55${fullNational}`;
     return result({
       original,
-      status: 'needs_review',
+      status: 'valid',
       countryCode: '55',
       areaCode,
-      nationalNumber: national,
+      nationalNumber: fullNational,
+      normalized,
       lineType: 'mobile',
-      issues: [...issues, 'Celular com 8 dígitos (sem o 9). Confirme o número antes de usar.'],
+      issues: [...issues, '9º dígito (9) adicionado automaticamente'],
     });
   }
 
@@ -193,4 +196,64 @@ export function formatPhoneBR(e164: string | null | undefined): string {
   if (!e164) return '';
   const p = parsePhoneNumberFromString(e164);
   return p ? p.formatInternational() : e164;
+}
+
+/**
+ * Normaliza e corrige telefones para o padrão de celular brasileiro real (13 dígitos com DDI 55 + DDD + 9).
+ * Injeta o 9º dígito quando ausente e descarta IDs de privacidade (LIDs).
+ */
+export function normalizeBrazilianPhoneDigits(raw: string): { valid: boolean; digits: string; formatted: string; isLid: boolean } {
+  if (!raw) return { valid: false, digits: '', formatted: '', isLid: false };
+  let digits = String(raw).replace(/@.*$/, '').replace(/\D/g, '');
+
+  // Detecta se é LID de privacidade do WhatsApp (14-15 dígitos)
+  if (digits.length >= 14 && !digits.startsWith('55')) {
+    return { valid: false, digits: '', formatted: '', isLid: true };
+  }
+
+  // Se tiver mais de 13 dígitos mesmo começando com 55: é LID ou dado inválido
+  if (digits.length > 13) {
+    return { valid: false, digits: '', formatted: '', isLid: true };
+  }
+
+  // Normalização para o padrão brasileiro
+  if (digits.startsWith('55')) {
+    const national = digits.slice(2);
+    // 10 dígitos nacionais: 2 de DDD + 8 de assinante (celular sem o 9)
+    if (national.length === 10) {
+      const ddd = national.slice(0, 2);
+      const sub = national.slice(2);
+      if (/^[6-9]/.test(sub)) {
+        digits = `55${ddd}9${sub}`;
+      }
+    }
+  } else {
+    // Sem DDI 55
+    if (digits.length === 10) {
+      const ddd = digits.slice(0, 2);
+      const sub = digits.slice(2);
+      if (/^[6-9]/.test(sub)) {
+        digits = `55${ddd}9${sub}`;
+      } else {
+        digits = `55${digits}`;
+      }
+    } else if (digits.length === 11) {
+      digits = `55${digits}`;
+    }
+  }
+
+  // Formatação visual padronizada
+  let formatted = digits;
+  if (digits.startsWith('55') && digits.length === 13) {
+    const ddd = digits.slice(2, 4);
+    formatted = `+55 (${ddd}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  } else if (digits.startsWith('55') && digits.length === 12) {
+    const ddd = digits.slice(2, 4);
+    formatted = `+55 (${ddd}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+  } else if (digits.length >= 10) {
+    formatted = `+${digits}`;
+  }
+
+  const valid = digits.length >= 10 && digits.length <= 13;
+  return { valid, digits, formatted, isLid: false };
 }

@@ -1,3 +1,5 @@
+import { normalizeBrazilianPhoneDigits } from '@/utils/phone';
+
 export interface SavedContact {
   name: string;
   phone: string;
@@ -154,13 +156,15 @@ export function removeDuplicateContacts(): { removedCount: number; session: Extr
 export function generateVCardString(contacts: { name?: string; digits: string }[]): string {
   return contacts
     .map((c, i) => {
-      const name = c.name?.trim() ? c.name.trim() : `Lead ${i + 1} (${c.digits.slice(-4)})`;
+      const norm = normalizeBrazilianPhoneDigits(c.digits);
+      const cleanDigits = norm.valid ? norm.digits : c.digits.replace(/\D/g, '');
+      const name = c.name?.trim() ? c.name.trim() : `Lead ${i + 1} (${cleanDigits.slice(-4)})`;
       return [
         'BEGIN:VCARD',
         'VERSION:3.0',
         `FN:${name}`,
         `N:${name};;;;`,
-        `TEL;TYPE=CELL,VOICE:+${c.digits}`,
+        `TEL;TYPE=CELL,VOICE:+${cleanDigits}`,
         'END:VCARD',
       ].join('\r\n');
     })

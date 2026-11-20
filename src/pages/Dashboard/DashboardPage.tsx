@@ -50,6 +50,7 @@ import {
   type SavedContact,
 } from '@/services/localExtractorStorage';
 import { WhatsAppMultiChipRobot } from '@/components/robot/WhatsAppMultiChipRobot';
+import { normalizeBrazilianPhoneDigits } from '@/utils/phone';
 
 type RoleFilterType = 'all' | 'members' | 'admins';
 type PageLimitType = 50 | 100 | 250 | 500 | 10000;
@@ -122,16 +123,23 @@ export function DashboardPage() {
             const receivedAt = data._receivedAt || Date.now();
             if (receivedAt > lastReceivedAtRef.current) {
               lastReceivedAtRef.current = receivedAt;
+              const validContacts = data.contacts
+                .map((c: { name: string; formatted: string; digits: string; isAdmin: boolean }) => {
+                  const norm = normalizeBrazilianPhoneDigits(c.digits || c.formatted);
+                  return {
+                    name: c.name || '',
+                    phone: norm.valid ? norm.formatted : (c.formatted || c.digits),
+                    digits: norm.valid ? norm.digits : c.digits,
+                    isAdmin: Boolean(c.isAdmin),
+                    invited: false,
+                  };
+                })
+                .filter((c: any) => c.digits && c.digits.length >= 10 && c.digits.length <= 13);
+
               const newSession: ExtractedGroupSession = {
                 groupName: data.groupName || 'Grupo WhatsApp',
-                totalContacts: data.contacts.length,
-                contacts: data.contacts.map((c: { name: string; formatted: string; digits: string; isAdmin: boolean }) => ({
-                  name: c.name || '',
-                  phone: c.formatted || c.digits,
-                  digits: c.digits,
-                  isAdmin: Boolean(c.isAdmin),
-                  invited: false,
-                })),
+                totalContacts: validContacts.length,
+                contacts: validContacts,
                 destinationGroup: {
                   name: destinationName || targetDestinationName,
                   inviteUrl: destinationUrl || targetDestinationUrl,
@@ -177,9 +185,9 @@ export function DashboardPage() {
           let isAdmin = false;
 
           for (const part of parts) {
-            const digits = part.replace(/\D/g, '');
-            if (digits.length >= 8 && digits.length <= 16 && !phone) {
-              phone = digits;
+            const norm = normalizeBrazilianPhoneDigits(part);
+            if (norm.valid && !norm.isLid && !phone) {
+              phone = norm.digits;
             } else if (/^(admin|sim|true)$/i.test(part)) {
               isAdmin = true;
             } else if (/^(não|nao|membro|false)$/i.test(part)) {
@@ -221,9 +229,9 @@ export function DashboardPage() {
 
           for (const cell of row) {
             const str = String(cell || '').trim();
-            const digits = str.replace(/\D/g, '');
-            if (digits.length >= 10 && digits.length <= 13 && !phone) {
-              phone = digits;
+            const norm = normalizeBrazilianPhoneDigits(str);
+            if (norm.valid && !norm.isLid && !phone) {
+              phone = norm.digits;
             } else if (/^(admin|sim|true)$/i.test(str)) {
               isAdmin = true;
             } else if (/^(não|nao|false|membro)$/i.test(str)) {
@@ -303,17 +311,20 @@ export function DashboardPage() {
       let phone = '';
 
       for (const p of parts) {
-        const digits = p.replace(/\D/g, '');
-        if (digits.length >= 8 && digits.length <= 15 && !phone) {
-          phone = digits;
+        const norm = normalizeBrazilianPhoneDigits(p);
+        if (norm.valid && !norm.isLid && !phone) {
+          phone = norm.digits;
         } else if (!name && isNaN(Number(p)) && p.length > 1) {
           name = p.trim();
         }
       }
 
       if (!phone) {
-        const match = line.match(/(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\s?)?\d{4}[-\s]?\d{4}/);
-        if (match) phone = match[0].replace(/\D/g, '');
+        const match = line.match(/(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\s?)?\d{4,5}[-\s]?\d{4}/);
+        if (match) {
+          const norm = normalizeBrazilianPhoneDigits(match[0]);
+          if (norm.valid && !norm.isLid) phone = norm.digits;
+        }
       }
 
       if (phone && !seen.has(phone)) {
@@ -329,7 +340,7 @@ export function DashboardPage() {
     }
 
     if (parsed.length === 0) {
-      toast('Nenhum número de telefone reconhecido no texto informado.', 'error');
+      toast('Nenhum número de telefone válido reconhecido no texto informado.', 'error');
       return;
     }
 
@@ -354,13 +365,8 @@ export function DashboardPage() {
 
   function formatPhoneDisplay(digits: string) {
     if (!digits) return '';
-    if (digits.startsWith('55') && digits.length >= 12) {
-      const ddd = digits.slice(2, 4);
-      const rest = digits.slice(4);
-      return rest.length === 9 ? `+55 (${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}` : `+55 (${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
-    }
-    if (digits.length >= 10) return `+${digits}`;
-    return digits;
+    const norm = normalizeBrazilianPhoneDigits(digits);
+    return norm.formatted || (digits.startsWith('55') ? `+${digits}` : `+55${digits}`);
   }
 
   // SALVAR DESTINO
