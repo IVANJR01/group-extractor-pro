@@ -190,17 +190,28 @@ export function removeDuplicateContacts(): { removedCount: number; session: Extr
  * Cada contato importado na agenda aparece instantaneamente na lista
  * "Adicionar Participantes" do WhatsApp do administrador.
  */
-export function generateVCardString(contacts: { name?: string; digits: string }[]): string {
+export function generateVCardString(contacts: { name?: string; digits: string }[], groupName: string = ''): string {
   return contacts
     .map((c, i) => {
       const norm = normalizeBrazilianPhoneDigits(c.digits);
       const cleanDigits = norm.valid ? norm.digits : c.digits.replace(/\D/g, '');
-      const name = c.name?.trim() ? c.name.trim() : `Lead ${i + 1} (${cleanDigits.slice(-4)})`;
+      const ddd = cleanDigits.startsWith('55') ? cleanDigits.slice(2, 4) : cleanDigits.slice(0, 2);
+      
+      let rawName = (c.name || '').trim().replace(/\s*\(\d{2}\)\s*$/g, '').trim();
+      const isGroupName = groupName && rawName.toLowerCase() === groupName.toLowerCase();
+      const isGeneric = !rawName || isGroupName || /^(rei da promo|grupo|contatos|whatsapp|membro|lead|sem nome)/i.test(rawName);
+
+      // Garante nome único para CADA contato no arquivo VCF.
+      // Se todos tivessem o mesmo nome (ex: REI DA PROMO), o Android mesclaria todos em 1 só contato!
+      const uniqueName = isGeneric
+        ? `Lead #${String(i + 1).padStart(3, '0')} (${ddd})`
+        : `${rawName} (${ddd})`;
+
       return [
         'BEGIN:VCARD',
         'VERSION:3.0',
-        `FN:${name}`,
-        `N:${name};;;;`,
+        `FN:${uniqueName}`,
+        `N:${uniqueName};;;;`,
         `TEL;TYPE=CELL,VOICE:+${cleanDigits}`,
         'END:VCARD',
       ].join('\r\n');
@@ -209,7 +220,7 @@ export function generateVCardString(contacts: { name?: string; digits: string }[
 }
 
 export function downloadVCardFile(fileName: string, contacts: { name?: string; digits: string }[]): void {
-  const content = generateVCardString(contacts);
+  const content = generateVCardString(contacts, fileName);
   const blob = new Blob([content], { type: 'text/vcard;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -234,7 +245,11 @@ export function generateGoogleContactsCSV(contacts: SavedContact[], label: strin
     const cleanDigits = norm.valid ? norm.digits : c.digits.replace(/\D/g, '');
     const ddd = cleanDigits.startsWith('55') ? cleanDigits.slice(2, 4) : cleanDigits.slice(0, 2);
     const sub = cleanDigits.startsWith('55') ? cleanDigits.slice(4) : cleanDigits.slice(2);
-    const givenName = c.name?.trim() ? c.name.trim() : `Lead #${String(i + 1).padStart(3, '0')}`;
+    let rawName = (c.name || '').trim().replace(/\s*\(\d{2}\)\s*$/g, '').trim();
+    const isGroupName = label && rawName.toLowerCase() === label.toLowerCase();
+    const isGeneric = !rawName || isGroupName || /^(rei da promo|grupo|contatos|whatsapp|membro|lead|sem nome)/i.test(rawName);
+
+    const givenName = isGeneric ? `Lead #${String(i + 1).padStart(3, '0')}` : rawName;
     const familyName = `(${ddd})`;
     const fullName = `${givenName} ${familyName}`;
     // Formato nacional limpo para o Google Contatos: (DD) 9XXXX-XXXX

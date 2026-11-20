@@ -30,6 +30,14 @@
 
   // Capturar nome do grupo ativo
   function getGroupName() {
+    // 0. Tenta obter o nome exato diretamente da memória do WhatsApp (100% à prova de falhas)
+    try {
+      const mem = extractFromMemory();
+      if (mem && mem.groupName && !/wa-wordmark|wordmark/i.test(mem.groupName)) {
+        return mem.groupName;
+      }
+    } catch {}
+
     // 1. Prioriza o cabeçalho principal da conversa ativa (#main header)
     const header = document.querySelector('#main header, div[data-testid="conversation-header"], header');
     if (header) {
@@ -429,7 +437,9 @@
       if (finalContacts.length < (totalExpected || 30)) {
         const memoryResult = extractFromMemory();
         if (memoryResult && memoryResult.list?.length > 0) {
-          if (memoryResult.groupName && !groupName) groupName = memoryResult.groupName;
+          if (memoryResult.groupName && (!groupName || groupName === 'Grupo WhatsApp' || /wa-wordmark|wordmark/i.test(groupName))) {
+            groupName = memoryResult.groupName;
+          }
           const map = new Map();
           for (const c of finalContacts) map.set(c.digits, c);
 
@@ -851,12 +861,20 @@
       const cleanDigits = (c.digits || '').replace(/\D/g, '');
       const ddd = cleanDigits.startsWith('55') ? cleanDigits.slice(2, 4) : cleanDigits.slice(0, 2);
       const sub = cleanDigits.startsWith('55') ? cleanDigits.slice(4) : cleanDigits.slice(2);
-      const name = c.name?.trim() ? c.name.trim() : `Lead #${String(i + 1).padStart(3, '0')} (${ddd})`;
+      
+      let rawName = (c.name || '').trim().replace(/\s*\(\d{2}\)\s*$/g, '').trim();
+      const isGroupName = groupName && rawName.toLowerCase() === groupName.toLowerCase();
+      const isGeneric = !rawName || isGroupName || /^(rei da promo|grupo|contatos|whatsapp|membro|lead|sem nome)/i.test(rawName);
+
+      const givenName = isGeneric ? `Lead #${String(i + 1).padStart(3, '0')}` : rawName;
+      const familyName = `(${ddd})`;
+      const fullName = `${givenName} ${familyName}`;
+
       // Formato nacional limpo para o Google Contatos: (DD) 9XXXX-XXXX
       // O Google Contatos associa a bandeira 🇧🇷 sem duplicar o texto "+55" dentro do campo
       const phone = sub.length === 9 ? `(${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : (cleanDigits ? `+${cleanDigits}` : '');
       const notes = `Grupo: ${groupName} | Admin: ${c.isAdmin ? 'Sim' : 'Não'}`;
-      rows.push([name, name, `(${ddd})`, `* myContacts ::: ${groupName}`, 'Mobile', phone, notes]);
+      rows.push([fullName, givenName, familyName, `* myContacts ::: ${groupName}`, 'Mobile', phone, notes]);
     }
 
     const csvContent = '\uFEFF' + rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');

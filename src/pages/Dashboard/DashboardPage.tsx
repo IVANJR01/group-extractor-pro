@@ -187,18 +187,18 @@ export function DashboardPage() {
           let phone = '';
           let isAdmin = false;
 
-          for (const part of parts) {
-            const norm = normalizeBrazilianPhoneDigits(part);
-            if (norm.valid && !norm.isLid && !phone) {
-              phone = norm.digits;
-            } else if (/^(admin|sim|true)$/i.test(part)) {
-              isAdmin = true;
-            } else if (/^(não|nao|membro|false)$/i.test(part)) {
-              // Ignora status de membro ou booleano para não virar nome
-            } else if (!name && isNaN(Number(part)) && part.length > 1 && !part.toLowerCase().includes('ofertas') && !part.toLowerCase().includes('review') && !part.toLowerCase().includes('grupo')) {
-              name = part;
+            for (const part of parts) {
+              const norm = normalizeBrazilianPhoneDigits(part);
+              if (norm.valid && !norm.isLid && !phone) {
+                phone = norm.digits;
+              } else if (/^(admin|sim|true)$/i.test(part)) {
+                isAdmin = true;
+              } else if (/^(não|nao|membro|false)$/i.test(part)) {
+                // Ignora status de membro ou booleano para não virar nome
+              } else if (!name && isNaN(Number(part)) && part.length > 1 && !/^(sim|não|nao|true|false|admin|membro|origem|destino|grupo|vip|whatsapp|sem nome)$/i.test(part) && !part.toLowerCase().includes('promo') && !part.toLowerCase().includes('review') && !part.toLowerCase().includes('grupo')) {
+                name = part;
+              }
             }
-          }
 
           if (phone) {
             newContacts.push({
@@ -239,7 +239,7 @@ export function DashboardPage() {
               isAdmin = true;
             } else if (/^(não|nao|false|membro)$/i.test(str)) {
               isAdmin = false;
-            } else if (!name && isNaN(Number(str)) && str.length > 1 && !/^(sim|não|nao|true|false|admin|membro)$/i.test(str)) {
+            } else if (!name && isNaN(Number(str)) && str.length > 1 && !/^(sim|não|nao|true|false|admin|membro|origem|destino|grupo|vip|whatsapp|sem nome)$/i.test(str) && !str.toLowerCase().includes('promo') && !str.toLowerCase().includes('review') && !str.toLowerCase().includes('grupo')) {
               name = str;
             }
           }
