@@ -842,22 +842,26 @@
   }
 
   function downloadCSV(groupName, contacts) {
-    const rows = [['Nome', 'Telefone', 'Telefone_Digitos', 'Administrador', 'Grupo']];
-    for (const c of contacts) {
-      rows.push([
-        c.name || '',
-        c.formatted || c.digits || '',
-        c.digits || '',
-        c.isAdmin ? 'Sim' : 'Não',
-        groupName
-      ]);
+    // Formato padrão oficial do Google Contatos (reconhece Celular / Mobile automaticamente)
+    const headers = ['Name', 'Given Name', 'Family Name', 'Group Membership', 'Phone 1 - Type', 'Phone 1 - Value', 'Notes'];
+    const rows = [headers];
+
+    for (let i = 0; i < contacts.length; i++) {
+      const c = contacts[i];
+      const cleanDigits = (c.digits || '').replace(/\D/g, '');
+      const ddd = cleanDigits.startsWith('55') ? cleanDigits.slice(2, 4) : cleanDigits.slice(0, 2);
+      const name = c.name?.trim() ? c.name.trim() : `Lead #${String(i + 1).padStart(3, '0')} (${ddd})`;
+      const phone = cleanDigits ? `+${cleanDigits}` : (c.formatted || '');
+      const notes = `Grupo: ${groupName} | Admin: ${c.isAdmin ? 'Sim' : 'Não'} | Digitos: ${cleanDigits}`;
+      rows.push([name, name, `(${ddd})`, `* myContacts ::: ${groupName}`, 'Mobile', phone, notes]);
     }
-    const csvContent = '\uFEFF' + rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n');
+
+    const csvContent = '\uFEFF' + rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `whatsapp_${slugify(groupName)}.csv`;
+    a.download = `whatsapp_${slugify(groupName)}_google.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
