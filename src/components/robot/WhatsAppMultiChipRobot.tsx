@@ -244,58 +244,51 @@ export function WhatsAppMultiChipRobot({
       return;
     }
 
-    // Auto-exclusão de duplicados e validação estrita de telefones reais (descarta LIDs do WhatsApp)
+    // Processamento de contatos (telefones e LIDs) sem bloquear o usuário
     const cleanContactsMap = new Map();
     let lidCount = 0;
+    let phoneCount = 0;
 
     for (const c of contacts) {
       let digits = (c.digits || c.phone || '').replace(/\D/g, '');
+      if (!digits || digits.length < 8) continue;
 
-      // Caso 1: Com DDI 55 (12 ou 13 dígitos)
+      let isLid = false;
       if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
-        const ddd = parseInt(digits.slice(2, 4), 10);
-        if (ddd < 11 || ddd > 99) {
-          lidCount++;
-          continue;
-        }
-      }
-      // Caso 2: Sem DDI 55 (10 ou 11 dígitos com DDD válido)
-      else if (digits.length === 10 || digits.length === 11) {
-        const ddd = parseInt(digits.slice(0, 2), 10);
-        if (ddd >= 11 && ddd <= 99) {
-          digits = '55' + digits;
-        } else {
-          lidCount++;
-          continue;
-        }
-      }
-      // Qualquer outro caso (12-16 dígitos sem 55, como LIDs criptográficos) é descartado
-      else {
+        phoneCount++;
+      } else if (digits.length === 10 || digits.length === 11) {
+        digits = '55' + digits;
+        phoneCount++;
+      } else if (digits.length >= 14) {
+        isLid = true;
         lidCount++;
-        continue;
+      } else {
+        phoneCount++;
       }
+
+      const rawName = (c.name || '').trim();
+      const cleanName = !/^(não|nao|sim|admin|membro)$/i.test(rawName) ? rawName : '';
 
       if (!cleanContactsMap.has(digits)) {
         cleanContactsMap.set(digits, {
-          name: c.name && !/^(não|nao|sim|admin|membro)$/i.test(c.name.trim()) ? c.name : '',
+          name: cleanName,
           digits,
           phone: digits,
+          isLid,
         });
       }
     }
 
     const uniqueList = Array.from(cleanContactsMap.values());
     if (uniqueList.length === 0) {
-      if (lidCount > 0) {
-        toast(`Os contatos da lista são IDs de privacidade (LID) e não telefones reais. Importe uma lista com telefones reais ou extraia novamente abrindo os membros no WhatsApp Web.`, 'error');
-      } else {
-        toast('Nenhum contato com número de telefone válido encontrado para adicionar.', 'error');
-      }
+      toast('Nenhum contato encontrado na lista para adicionar.', 'error');
       return;
     }
 
-    if (lidCount > 0) {
-      toast(`ℹ️ ${lidCount} contatos com ID de privacidade foram ignorados para evitar erro 404.`, 'info');
+    if (lidCount > 0 && phoneCount === 0) {
+      toast(`ℹ️ A lista possui ${lidCount} contatos com IDs de privacidade (LID). O robô tentará adicionar via @lid com fallback.`, 'info');
+    } else if (lidCount > 0) {
+      toast(`ℹ️ ${phoneCount} números e ${lidCount} IDs de privacidade (LID) prontos para o robô.`, 'info');
     }
 
     setIsStartingTask(true);

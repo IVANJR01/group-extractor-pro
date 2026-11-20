@@ -338,57 +338,52 @@ class RobotManager {
       throw new Error('Nenhum WhatsApp conectado no robô! Conecte pelo menos 1 número.');
     }
 
-    // Filtra contatos com dígitos válidos, remove LIDs (IDs de privacidade do WhatsApp) e duplicações
+    // Processa contatos com dígitos válidos (suporta tanto telefones reais quanto LIDs)
     const uniqueMap = new Map();
     let lidCount = 0;
+    let phoneCount = 0;
 
     for (const c of contacts) {
       let digits = (c.digits || c.phone || '').replace(/\D/g, '');
+      if (!digits || digits.length < 8) continue;
 
-      // Validação estrita de número de telefone real:
-      // Caso 1: Já tem código do Brasil 55 e tem 12 ou 13 dígitos (ex: 554398370727 ou 5511999998888)
+      let isLid = false;
+
+      // Classifica se é telefone BR ou LID de privacidade
       if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
-        const ddd = parseInt(digits.slice(2, 4), 10);
-        if (ddd < 11 || ddd > 99) {
-          lidCount++;
-          continue;
-        }
-      }
-      // Caso 2: Número nacional com DDD sem o 55 (10 ou 11 dígitos, ex: 4398370727 ou 11999998888)
-      else if (digits.length === 10 || digits.length === 11) {
-        const ddd = parseInt(digits.slice(0, 2), 10);
-        if (ddd >= 11 && ddd <= 99) {
-          digits = '55' + digits;
-        } else {
-          lidCount++;
-          continue;
-        }
-      }
-      // Qualquer outro caso (12 a 16 dígitos sem 55, como LIDs do WhatsApp) é descartado
-      else {
+        phoneCount++;
+      } else if (digits.length === 10 || digits.length === 11) {
+        digits = '55' + digits;
+        phoneCount++;
+      } else if (digits.length >= 14) {
+        isLid = true;
         lidCount++;
-        continue;
+      } else {
+        phoneCount++;
       }
+
+      const rawName = (c.name || '').trim();
+      const cleanName = !/^(não|nao|sim|admin|membro)$/i.test(rawName) ? rawName : '';
 
       if (!uniqueMap.has(digits)) {
         uniqueMap.set(digits, {
-          name: c.name && !/^(não|nao|sim|admin|membro)$/i.test(c.name.trim()) ? c.name : '',
+          name: cleanName,
           digits,
           phone: digits,
+          isLid,
         });
       }
     }
 
-    if (lidCount > 0) {
-      this.addLog(`⚠️ ${lidCount} contatos com ID de privacidade (LID) foram ignorados por não serem números telefônicos reais.`, 'warning');
+    if (lidCount > 0 && phoneCount > 0) {
+      this.addLog(`ℹ️ Lista processada: ${phoneCount} telefones e ${lidCount} IDs de privacidade (LID). Suporte dual ativado.`, 'info');
+    } else if (lidCount > 0) {
+      this.addLog(`ℹ️ Lista com ${lidCount} IDs de privacidade (LID). O robô adicionará via endereçamento @lid com fallback automático.`, 'info');
     }
 
     const uniqueContacts = Array.from(uniqueMap.values());
     if (uniqueContacts.length === 0) {
-      if (lidCount > 0) {
-        throw new Error(`Todos os ${lidCount} contatos da lista possuem IDs de privacidade (LIDs) em vez de números de telefone reais. Extraia o grupo novamente abrindo a lista de membros no WhatsApp Web ou importe uma planilha com números reais.`);
-      }
-      throw new Error('Nenhum contato com número de telefone válido para adicionar.');
+      throw new Error('Nenhum contato válido encontrado na lista para adicionar.');
     }
 
     // Encontra o socket principal para resolver o grupo
@@ -490,39 +485,68 @@ class RobotManager {
 
       const sock = this.sockets.get(selectedChip.index);
       const contact = contacts[i];
+      const displayName = contact.name ? `${contact.name} (${contact.digits})` : contact.digits;
 
       this.activeTask.currentIndex = i + 1;
       this.activeTask.currentChip = selectedChip.name;
-      this.activeTask.currentContact = contact.name ? `${contact.name} (${contact.digits})` : contact.digits;
+      this.activeTask.currentContact = displayName;
 
-      // Monta o JID do participante
-      const participantJid = `${contact.digits}@s.whatsapp.net`;
+      // Determina JID primário e JID de fallback (LID vs Phone Number)
+      let primaryJid;
+      let fallbackJid = null;
+
+      if (contact.isLid || contact.digits.length >= 14) {
+        primaryJid = `${contact.digits}@lid`;
+        fallbackJid = `${contact.digits}@s.whatsapp.net`;
+      } else {
+        const cleanDigits = contact.digits.length <= 11 ? '55' + contact.digits : contact.digits;
+        primaryJid = `${cleanDigits}@s.whatsapp.net`;
+        if (contact.digits.length >= 12) {
+          fallbackJid = `${contact.digits}@lid`;
+        }
+      }
 
       try {
-        this.addLog(`🔄 [${selectedChip.name} • ${selectedChip.phone || 'Ativo'}] Adicionando ${contact.name || contact.digits}...`, 'info');
+        this.addLog(`🔄 [${selectedChip.name} • ${selectedChip.phone || 'Ativo'}] Adicionando ${displayName}...`, 'info');
 
-        const result = await sock.groupParticipantsUpdate(groupJid, [participantJid], 'add');
-        const resInfo = Array.isArray(result) ? result[0] : result;
-        const statusCode = resInfo?.status || resInfo?.[participantJid]?.code || '200';
+        let statusCode = '200';
+        let res = await sock.groupParticipantsUpdate(groupJid, [primaryJid], 'add');
+        let resInfo = Array.isArray(res) ? res[0] : res;
+        statusCode = String(resInfo?.status || resInfo?.[primaryJid]?.code || '200');
 
-        if (statusCode === '200' || statusCode === 200) {
+        // Se deu 404 e existe JID de fallback, tenta o formato alternativo
+        if (statusCode === '404' && fallbackJid) {
+          try {
+            const fbRes = await sock.groupParticipantsUpdate(groupJid, [fallbackJid], 'add');
+            const fbInfo = Array.isArray(fbRes) ? fbRes[0] : fbRes;
+            const fbCode = String(fbInfo?.status || fbInfo?.[fallbackJid]?.code || '404');
+            if (fbCode === '200' || fbCode === '403' || fbCode === '409') {
+              statusCode = fbCode;
+            }
+          } catch {}
+        }
+
+        if (statusCode === '200') {
           selectedChip.addedToday++;
           this.activeTask.successCount++;
-          this.addLog(`✅ [${selectedChip.name}] ${contact.name || contact.digits} adicionado(a) com sucesso! (${selectedChip.addedToday}/${dailyLimitPerChip} hoje)`, 'success');
-        } else if (statusCode === '403' || statusCode === 403) {
-          // Privacidade restrita pelo usuário - WhatsApp manda convite
+          this.addLog(`✅ [${selectedChip.name}] ${displayName} adicionado(a) com sucesso! (${selectedChip.addedToday}/${dailyLimitPerChip} hoje)`, 'success');
+        } else if (statusCode === '403') {
+          // Usuário com privacidade ativada; o WhatsApp enviou convite no privado
           selectedChip.addedToday++;
           this.activeTask.successCount++;
-          this.addLog(`✉️ [${selectedChip.name}] ${contact.name || contact.digits}: Privacidade restrita; convite direto enviado no privado.`, 'info');
-        } else if (statusCode === '409' || statusCode === 409) {
-          this.addLog(`ℹ️ [${selectedChip.name}] ${contact.name || contact.digits} já está no grupo.`, 'info');
+          this.addLog(`✉️ [${selectedChip.name}] ${displayName}: Privacidade restrita; convite direto enviado no privado.`, 'info');
+        } else if (statusCode === '409') {
+          this.addLog(`ℹ️ [${selectedChip.name}] ${displayName} já está no grupo.`, 'info');
+        } else if (statusCode === '404') {
+          this.activeTask.failedCount++;
+          this.addLog(`⚠️ [${selectedChip.name}] ${displayName}: Não foi possível adicionar diretamente (Código 404 - ID/Número inacessível no WhatsApp).`, 'warning');
         } else {
           this.activeTask.failedCount++;
-          this.addLog(`⚠️ [${selectedChip.name}] Falha ao adicionar ${contact.digits} (Código ${statusCode}).`, 'warning');
+          this.addLog(`⚠️ [${selectedChip.name}] Falha ao adicionar ${displayName} (Código ${statusCode}).`, 'warning');
         }
       } catch (err) {
         this.activeTask.failedCount++;
-        this.addLog(`❌ [${selectedChip.name}] Erro ao adicionar ${contact.digits}: ${err.message}`, 'error');
+        this.addLog(`❌ [${selectedChip.name}] Erro ao adicionar ${displayName}: ${err.message}`, 'error');
       }
 
       // Se ainda houver contatos e não estiver cancelado, aguarda delay anti-ban

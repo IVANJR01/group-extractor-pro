@@ -178,11 +178,13 @@ export function DashboardPage() {
 
           for (const part of parts) {
             const digits = part.replace(/\D/g, '');
-            if (digits.length >= 8 && digits.length <= 15 && !phone) {
+            if (digits.length >= 8 && digits.length <= 16 && !phone) {
               phone = digits;
-            } else if (/admin|sim|true/i.test(part)) {
+            } else if (/^(admin|sim|true)$/i.test(part)) {
               isAdmin = true;
-            } else if (!name && isNaN(Number(part)) && part.length > 1) {
+            } else if (/^(não|nao|membro|false)$/i.test(part)) {
+              // Ignora status de membro ou booleano para não virar nome
+            } else if (!name && isNaN(Number(part)) && part.length > 1 && !part.toLowerCase().includes('ofertas') && !part.toLowerCase().includes('review') && !part.toLowerCase().includes('grupo')) {
               name = part;
             }
           }
