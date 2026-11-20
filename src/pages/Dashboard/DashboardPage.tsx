@@ -98,6 +98,11 @@ export function DashboardPage() {
   const [selectedDigits, setSelectedDigits] = useState<Set<string>>(new Set());
   const [pageSize, setPageSize] = useState<PageLimitType>(100);
   const [copiedPhones, setCopiedPhones] = useState(false);
+  const [googleEmail, setGoogleEmail] = useState('3msolucoes01@gmail.com');
+  const [isEditingEmail, setIsEditingEmail] = useState(false);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [lastDownloadedFile, setLastDownloadedFile] = useState('');
+  const [exportFormat, setExportFormat] = useState<'with_55' | 'without_55'>('with_55');
 
   // Sincroniza destino padrão caso esteja vazio ou com valor antigo
   useEffect(() => {
@@ -187,18 +192,18 @@ export function DashboardPage() {
           let phone = '';
           let isAdmin = false;
 
-            for (const part of parts) {
-              const norm = normalizeBrazilianPhoneDigits(part);
-              if (norm.valid && !norm.isLid && !phone) {
-                phone = norm.digits;
-              } else if (/^(admin|sim|true)$/i.test(part)) {
-                isAdmin = true;
-              } else if (/^(não|nao|membro|false)$/i.test(part)) {
-                // Ignora status de membro ou booleano para não virar nome
-              } else if (!name && isNaN(Number(part)) && part.length > 1 && !/^(sim|não|nao|true|false|admin|membro|origem|destino|grupo|vip|whatsapp|sem nome)$/i.test(part) && !part.toLowerCase().includes('promo') && !part.toLowerCase().includes('review') && !part.toLowerCase().includes('grupo')) {
-                name = part;
-              }
+          for (const part of parts) {
+            const norm = normalizeBrazilianPhoneDigits(part);
+            if (norm.valid && !norm.isLid && !phone) {
+              phone = norm.digits;
+            } else if (/^(admin|sim|true)$/i.test(part)) {
+              isAdmin = true;
+            } else if (/^(não|nao|membro|false)$/i.test(part)) {
+              // Ignora status de membro ou booleano para não virar nome
+            } else if (!name && isNaN(Number(part)) && part.length > 1 && !/^(sim|não|nao|true|false|admin|membro|origem|destino|grupo|vip|whatsapp|sem nome)$/i.test(part) && !part.toLowerCase().includes('promo') && !part.toLowerCase().includes('ofertas') && !part.toLowerCase().includes('review') && !part.toLowerCase().includes('grupo')) {
+              name = part;
             }
+          }
 
           if (phone) {
             newContacts.push({
@@ -211,67 +216,147 @@ export function DashboardPage() {
           }
         }
       } else {
-        const XLSX = await import('@e965/xlsx');
-        const buffer = await file.arrayBuffer();
-        const workbook = XLSX.read(buffer, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as (string | number)[][];
+          const XLSX = await import('@e965/xlsx');
+          const buffer = await file.arrayBuffer();
+          const workbook = XLSX.read(buffer, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as (string | number)[][];
 
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i];
-          if (!row || row.length === 0) continue;
-          if (i === 0) {
-            const headerStr = row.join(' ').toLowerCase();
-            if (headerStr.includes('telefone') || headerStr.includes('phone') || headerStr.includes('nome')) continue;
-          }
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+            if (i === 0) {
+              const headerStr = row.join(' ').toLowerCase();
+              if (headerStr.includes('telefone') || headerStr.includes('phone') || headerStr.includes('nome')) continue;
+            }
 
-          let name = '';
-          let phone = '';
-          let isAdmin = false;
+            let name = '';
+            let phone = '';
+            let isAdmin = false;
 
-          for (const cell of row) {
-            const str = String(cell || '').trim();
-            const norm = normalizeBrazilianPhoneDigits(str);
-            if (norm.valid && !norm.isLid && !phone) {
-              phone = norm.digits;
-            } else if (/^(admin|sim|true)$/i.test(str)) {
-              isAdmin = true;
-            } else if (/^(não|nao|false|membro)$/i.test(str)) {
-              isAdmin = false;
-            } else if (!name && isNaN(Number(str)) && str.length > 1 && !/^(sim|não|nao|true|false|admin|membro|origem|destino|grupo|vip|whatsapp|sem nome)$/i.test(str) && !str.toLowerCase().includes('promo') && !str.toLowerCase().includes('review') && !str.toLowerCase().includes('grupo')) {
-              name = str;
+            for (const cell of row) {
+              const str = String(cell || '').trim();
+              const norm = normalizeBrazilianPhoneDigits(str);
+              if (norm.valid && !norm.isLid && !phone) {
+                phone = norm.digits;
+              } else if (/^(admin|sim|true)$/i.test(str)) {
+                isAdmin = true;
+              } else if (/^(não|nao|false|membro)$/i.test(str)) {
+                isAdmin = false;
+              } else if (!name && isNaN(Number(str)) && str.length > 1 && !/^(sim|não|nao|true|false|admin|membro)$/i.test(str)) {
+              } else if (!name && isNaN(Number(str)) && str.length > 1 && !/^(sim|não|nao|true|false|admin|membro|origem|destino|grupo|vip|whatsapp|sem nome)$/i.test(str) && !str.toLowerCase().includes('promo') && !str.toLowerCase().includes('review') && !str.toLowerCase().includes('grupo')) {
+                name = str;
+              }
+            }
+
+            if (phone) {
+              newContacts.push({
+                name,
+                phone: formatPhoneDisplay(phone),
+                digits: phone,
+                isAdmin,
+                invited: false,
+              });
             }
           }
-
-          if (phone) {
-            newContacts.push({
-              name,
-              phone: formatPhoneDisplay(phone),
-              digits: phone,
-              isAdmin,
-              invited: false,
-            });
-          }
         }
-      }
 
-      if (newContacts.length === 0) {
-        toast('Nenhum número de telefone válido encontrado no arquivo.', 'error');
+        if (newContacts.length === 0) {
+          toast('Nenhum número de telefone válido encontrado no arquivo.', 'error');
+          return;
+        }
+
+        const map = new Map<string, SavedContact>();
+        for (const c of newContacts) {
+          if (!map.has(c.digits)) map.set(c.digits, c);
+        }
+        const deduped = Array.from(map.values());
+
+        const groupLabel = file.name.replace(/\.[^/.]+$/, '').replace(/[_.-]+/g, ' ');
+        const newSession: ExtractedGroupSession = {
+          groupName: groupLabel || 'Planilha Importada',
+          totalContacts: deduped.length,
+          contacts: deduped,
+          destinationGroup: {
+            name: destinationName || targetDestinationName,
+            inviteUrl: destinationUrl || targetDestinationUrl,
+          },
+          lastUpdated: new Date().toISOString(),
+        };
+
+        saveActiveSession(newSession);
+        setSession(newSession);
+        setSelectedDigits(new Set());
+        lastReceivedAtRef.current = Date.now();
+        fetch('/api/extracted-contacts', { method: 'DELETE' }).catch(() => { });
+        toast(`✅ ${deduped.length} contatos importados do arquivo com sucesso!`, 'info');
+      } catch (err: unknown) {
+        console.error(err);
+        toast('Erro ao processar o arquivo. Verifique se o formato é válido.', 'error');
+      } finally {
+        setIsProcessingFile(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+
+    // IMPORTAR POR TEXTO COLADO
+    const handleImportPastedText = () => {
+      if (!pasteInput.trim()) {
+        toast('Cole a lista de contatos ou números no campo de texto.', 'error');
         return;
       }
 
-      const map = new Map<string, SavedContact>();
-      for (const c of newContacts) {
-        if (!map.has(c.digits)) map.set(c.digits, c);
-      }
-      const deduped = Array.from(map.values());
+      const lines = pasteInput.split(/\r?\n/);
+      const parsed: SavedContact[] = [];
+      const seen = new Set<string>();
 
-      const groupLabel = file.name.replace(/\.[^/.]+$/, '').replace(/[_.-]+/g, ' ');
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
+
+        const parts = line.split(/[;,|\t]/);
+        let name = '';
+        let phone = '';
+
+        for (const p of parts) {
+          const norm = normalizeBrazilianPhoneDigits(p);
+          if (norm.valid && !norm.isLid && !phone) {
+            phone = norm.digits;
+          } else if (!name && isNaN(Number(p)) && p.length > 1) {
+            name = p.trim();
+          }
+        }
+
+        if (!phone) {
+          const match = line.match(/(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\s?)?\d{4,5}[-\s]?\d{4}/);
+          if (match) {
+            const norm = normalizeBrazilianPhoneDigits(match[0]);
+            if (norm.valid && !norm.isLid) phone = norm.digits;
+          }
+        }
+
+        if (phone && !seen.has(phone)) {
+          seen.add(phone);
+          parsed.push({
+            name,
+            phone: formatPhoneDisplay(phone),
+            digits: phone,
+            isAdmin: false,
+            invited: false,
+          });
+        }
+      }
+
+      if (parsed.length === 0) {
+        toast('Nenhum número de telefone válido reconhecido no texto informado.', 'error');
+        return;
+      }
+
       const newSession: ExtractedGroupSession = {
-        groupName: groupLabel || 'Planilha Importada',
-        totalContacts: deduped.length,
-        contacts: deduped,
+        groupName: session?.groupName || 'Lista Colada',
+        totalContacts: parsed.length,
+        contacts: parsed,
         destinationGroup: {
           name: destinationName || targetDestinationName,
           inviteUrl: destinationUrl || targetDestinationUrl,
@@ -281,90 +366,11 @@ export function DashboardPage() {
 
       saveActiveSession(newSession);
       setSession(newSession);
-      setSelectedDigits(new Set());
+      setPasteInput('');
       lastReceivedAtRef.current = Date.now();
       fetch('/api/extracted-contacts', { method: 'DELETE' }).catch(() => { });
-      toast(`✅ ${deduped.length} contatos importados do arquivo com sucesso!`, 'info');
-    } catch (err: unknown) {
-      console.error(err);
-      toast('Erro ao processar o arquivo. Verifique se o formato é válido.', 'error');
-    } finally {
-      setIsProcessingFile(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  // IMPORTAR POR TEXTO COLADO
-  const handleImportPastedText = () => {
-    if (!pasteInput.trim()) {
-      toast('Cole a lista de contatos ou números no campo de texto.', 'error');
-      return;
-    }
-
-    const lines = pasteInput.split(/\r?\n/);
-    const parsed: SavedContact[] = [];
-    const seen = new Set<string>();
-
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line) continue;
-
-      const parts = line.split(/[;,|\t]/);
-      let name = '';
-      let phone = '';
-
-      for (const p of parts) {
-        const norm = normalizeBrazilianPhoneDigits(p);
-        if (norm.valid && !norm.isLid && !phone) {
-          phone = norm.digits;
-        } else if (!name && isNaN(Number(p)) && p.length > 1) {
-          name = p.trim();
-        }
-      }
-
-      if (!phone) {
-        const match = line.match(/(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\s?)?\d{4,5}[-\s]?\d{4}/);
-        if (match) {
-          const norm = normalizeBrazilianPhoneDigits(match[0]);
-          if (norm.valid && !norm.isLid) phone = norm.digits;
-        }
-      }
-
-      if (phone && !seen.has(phone)) {
-        seen.add(phone);
-        parsed.push({
-          name,
-          phone: formatPhoneDisplay(phone),
-          digits: phone,
-          isAdmin: false,
-          invited: false,
-        });
-      }
-    }
-
-    if (parsed.length === 0) {
-      toast('Nenhum número de telefone válido reconhecido no texto informado.', 'error');
-      return;
-    }
-
-    const newSession: ExtractedGroupSession = {
-      groupName: session?.groupName || 'Lista Colada',
-      totalContacts: parsed.length,
-      contacts: parsed,
-      destinationGroup: {
-        name: destinationName || targetDestinationName,
-        inviteUrl: destinationUrl || targetDestinationUrl,
-      },
-      lastUpdated: new Date().toISOString(),
+      toast(`✅ ${parsed.length} contatos carregados da lista colada!`, 'info');
     };
-
-    saveActiveSession(newSession);
-    setSession(newSession);
-    setPasteInput('');
-    lastReceivedAtRef.current = Date.now();
-    fetch('/api/extracted-contacts', { method: 'DELETE' }).catch(() => { });
-    toast(`✅ ${parsed.length} contatos carregados da lista colada!`, 'info');
-  };
 
   function formatPhoneDisplay(digits: string) {
     if (!digits) return '';
@@ -399,13 +405,11 @@ export function DashboardPage() {
     });
   };
 
-  const [exportFormat, setExportFormat] = useState<'with_55' | 'without_55'>('with_55');
-
   const downloadCSV = (forceInclude55?: boolean) => {
     if (!session || session.contacts.length === 0) return;
     const include55 = forceInclude55 !== undefined ? forceInclude55 : (exportFormat === 'with_55');
     const rows = [['Nome', 'Telefone', 'Digitos', 'Administrador', 'Origem', 'Grupo_Destino']];
-    
+
     for (let i = 0; i < session.contacts.length; i++) {
       const c = session.contacts[i];
       const norm = normalizeBrazilianPhoneDigits(c.digits || c.phone);
@@ -497,12 +501,6 @@ export function DashboardPage() {
     toast(`Planilha Excel baixada (${include55 ? 'COM +55' : 'SEM +55'})!`, 'info');
   };
 
-  // SINCRONIZAR COM GOOGLE CONTATOS (3msolucoes01@gmail.com)
-  const [googleEmail, setGoogleEmail] = useState('3msolucoes01@gmail.com');
-  const [isEditingEmail, setIsEditingEmail] = useState(false);
-  const [syncModalOpen, setSyncModalOpen] = useState(false);
-  const [lastDownloadedFile, setLastDownloadedFile] = useState('');
-
   const handleSyncGoogleContacts = (forceInclude55?: boolean) => {
     if (!session || session.contacts.length === 0) {
       toast('Carregue ou extraia contatos antes de sincronizar.', 'error');
@@ -542,367 +540,367 @@ export function DashboardPage() {
     window.open(`https://wa.me/${c.digits}?text=${encodedText}`, '_blank');
   };
 
-  // EXCLUSÃO EM MASSA
-  const handleDeleteAdmins = () => {
-    const adminCount = (session?.contacts || []).filter((c) => c.isAdmin).length;
-    if (adminCount === 0) {
-      toast('Não há administradores na lista.', 'info');
-      return;
-    }
-    const updated = deleteAdmins();
-    if (updated) {
-      setSession({ ...updated });
-      setSelectedDigits(new Set());
-      toast(`🛡️ ${adminCount} administrador(es) excluído(s) com sucesso!`, 'info');
-    }
-  };
+    // EXCLUSÃO EM MASSA
+    const handleDeleteAdmins = () => {
+      const adminCount = (session?.contacts || []).filter((c) => c.isAdmin).length;
+      if (adminCount === 0) {
+        toast('Não há administradores na lista.', 'info');
+        return;
+      }
+      const updated = deleteAdmins();
+      if (updated) {
+        setSession({ ...updated });
+        setSelectedDigits(new Set());
+        toast(`🛡️ ${adminCount} administrador(es) excluído(s) com sucesso!`, 'info');
+      }
+    };
 
-  const handleDeleteDuplicates = () => {
-    const { removedCount, session: updated } = removeDuplicateContacts();
-    if (removedCount > 0 && updated) {
-      setSession({ ...updated });
-      setSelectedDigits(new Set());
-      toast(`🛡️ ${removedCount} número(s) repetido(s) removido(s) com sucesso!`, 'info');
-    } else {
-      toast('Nenhum número repetido encontrado na lista.', 'info');
-    }
-  };
+    const handleDeleteDuplicates = () => {
+      const { removedCount, session: updated } = removeDuplicateContacts();
+      if (removedCount > 0 && updated) {
+        setSession({ ...updated });
+        setSelectedDigits(new Set());
+        toast(`🛡️ ${removedCount} número(s) repetido(s) removido(s) com sucesso!`, 'info');
+      } else {
+        toast('Nenhum número repetido encontrado na lista.', 'info');
+      }
+    };
 
-  const handleDeleteSelected = () => {
-    if (selectedDigits.size === 0) return;
-    const count = selectedDigits.size;
-    const updated = deleteContacts(Array.from(selectedDigits));
-    if (updated) {
-      setSession({ ...updated });
-      setSelectedDigits(new Set());
-      toast(`🗑️ ${count} contato(s) excluído(s) com sucesso!`, 'info');
-    }
-  };
+    const handleDeleteSelected = () => {
+      if (selectedDigits.size === 0) return;
+      const count = selectedDigits.size;
+      const updated = deleteContacts(Array.from(selectedDigits));
+      if (updated) {
+        setSession({ ...updated });
+        setSelectedDigits(new Set());
+        toast(`🗑️ ${count} contato(s) excluído(s) com sucesso!`, 'info');
+      }
+    };
 
-  const handleDeleteSingle = (digits: string, name: string) => {
-    const updated = deleteSingleContact(digits);
-    if (updated) {
-      setSession({ ...updated });
+    const handleDeleteSingle = (digits: string, name: string) => {
+      const updated = deleteSingleContact(digits);
+      if (updated) {
+        setSession({ ...updated });
+        const next = new Set(selectedDigits);
+        next.delete(digits);
+        setSelectedDigits(next);
+        toast(`Contato ${name || digits} removido.`, 'info');
+      }
+    };
+
+    const handleClearAll = () => {
+      if (window.confirm('Tem certeza que deseja limpar todos os contatos desta lista?')) {
+        const empty: ExtractedGroupSession = {
+          groupName: 'Nenhum grupo ativo',
+          totalContacts: 0,
+          contacts: [],
+          destinationGroup: {
+            name: destinationName || targetDestinationName,
+            inviteUrl: destinationUrl || targetDestinationUrl,
+          },
+          lastUpdated: new Date().toISOString(),
+        };
+        saveActiveSession(empty);
+        setSession(empty);
+        setSelectedDigits(new Set());
+        toast('Lista limpa com sucesso.', 'info');
+      }
+    };
+
+    // MULTI-ADMIN: GERAR CRONOGRAMA COM 6 NÚMEROS E 20 POR NÚMERO
+    const handleGenerateSchedule = () => {
+      const updated = generateMultiAdminSchedule(accountsCount, dailyLimitPerAccount);
+      if (updated) {
+        setSession({ ...updated });
+        toast(`🚀 Cronograma gerado! Lotes divididos entre ${accountsCount} números (média de ${dailyLimitPerAccount}/dia).`, 'info');
+      }
+    };
+
+    const handleToggleBatch = (batchId: string, currentStatus: boolean) => {
+      const updated = toggleBatchCompleted(batchId, !currentStatus);
+      if (updated) {
+        setSession({ ...updated });
+        toast(!currentStatus ? '✅ Lote marcado como concluído!' : 'Lote desmarcado.', 'info');
+      }
+    };
+
+    const handleCopyBatchPhones = (contacts: SavedContact[]) => {
+      const text = contacts.map((c) => c.phone || c.digits).join('\n');
+      navigator.clipboard.writeText(text).then(() => {
+        toast(`📋 ${contacts.length} telefones do lote copiados para a área de transferência!`, 'info');
+      });
+    };
+
+    const handleDownloadBatchVCard = (adminName: string, dayLabel: string, contacts: SavedContact[]) => {
+      downloadVCardFile(`${adminName}_${dayLabel}`, contacts);
+      toast(`📥 Arquivo de contatos (.vcf) gerado para ${adminName}!`, 'info');
+    };
+
+    // SELEÇÃO
+    const toggleSelectOne = (digits: string) => {
       const next = new Set(selectedDigits);
-      next.delete(digits);
+      if (next.has(digits)) next.delete(digits);
+      else next.add(digits);
       setSelectedDigits(next);
-      toast(`Contato ${name || digits} removido.`, 'info');
-    }
-  };
+    };
 
-  const handleClearAll = () => {
-    if (window.confirm('Tem certeza que deseja limpar todos os contatos desta lista?')) {
-      const empty: ExtractedGroupSession = {
-        groupName: 'Nenhum grupo ativo',
-        totalContacts: 0,
-        contacts: [],
-        destinationGroup: {
-          name: destinationName || targetDestinationName,
-          inviteUrl: destinationUrl || targetDestinationUrl,
-        },
-        lastUpdated: new Date().toISOString(),
-      };
-      saveActiveSession(empty);
-      setSession(empty);
-      setSelectedDigits(new Set());
-      toast('Lista limpa com sucesso.', 'info');
-    }
-  };
+    const toggleSelectAll = (visibleList: { digits: string }[]) => {
+      const allSelected = visibleList.every((c) => selectedDigits.has(c.digits));
+      const next = new Set(selectedDigits);
+      if (allSelected) {
+        visibleList.forEach((c) => next.delete(c.digits));
+      } else {
+        visibleList.forEach((c) => next.add(c.digits));
+      }
+      setSelectedDigits(next);
+    };
 
-  // MULTI-ADMIN: GERAR CRONOGRAMA COM 6 NÚMEROS E 20 POR NÚMERO
-  const handleGenerateSchedule = () => {
-    const updated = generateMultiAdminSchedule(accountsCount, dailyLimitPerAccount);
-    if (updated) {
-      setSession({ ...updated });
-      toast(`🚀 Cronograma gerado! Lotes divididos entre ${accountsCount} números (média de ${dailyLimitPerAccount}/dia).`, 'info');
+    // DETECÇÃO DE DUPLICIDADES EM TEMPO REAL
+    const allContacts = session?.contacts || [];
+    const digitsSet = new Set<string>();
+    let duplicateCount = 0;
+    for (const c of allContacts) {
+      if (digitsSet.has(c.digits)) duplicateCount++;
+      else digitsSet.add(c.digits);
     }
-  };
 
-  const handleToggleBatch = (batchId: string, currentStatus: boolean) => {
-    const updated = toggleBatchCompleted(batchId, !currentStatus);
-    if (updated) {
-      setSession({ ...updated });
-      toast(!currentStatus ? '✅ Lote marcado como concluído!' : 'Lote desmarcado.', 'info');
-    }
-  };
+    // FILTROS
+    const adminTotal = allContacts.filter((c) => c.isAdmin).length;
+    const memberTotal = allContacts.filter((c) => !c.isAdmin).length;
 
-  const handleCopyBatchPhones = (contacts: SavedContact[]) => {
-    const text = contacts.map((c) => c.phone || c.digits).join('\n');
-    navigator.clipboard.writeText(text).then(() => {
-      toast(`📋 ${contacts.length} telefones do lote copiados para a área de transferência!`, 'info');
+    const filteredContacts = allContacts.filter((c) => {
+      if (roleFilter === 'admins' && !c.isAdmin) return false;
+      if (roleFilter === 'members' && c.isAdmin) return false;
+      if (!searchTerm) return true;
+      const q = searchTerm.toLowerCase();
+      return (c.name && c.name.toLowerCase().includes(q)) || c.phone.includes(q) || c.digits.includes(q);
     });
-  };
 
-  const handleDownloadBatchVCard = (adminName: string, dayLabel: string, contacts: SavedContact[]) => {
-    downloadVCardFile(`${adminName}_${dayLabel}`, contacts);
-    toast(`📥 Arquivo de contatos (.vcf) gerado para ${adminName}!`, 'info');
-  };
+    const displayLimit = pageSize === 10000 ? filteredContacts.length : pageSize;
+    const paginatedContacts = filteredContacts.slice(0, displayLimit);
+    const isAllVisibleSelected = paginatedContacts.length > 0 && paginatedContacts.every((c) => selectedDigits.has(c.digits));
 
-  // SELEÇÃO
-  const toggleSelectOne = (digits: string) => {
-    const next = new Set(selectedDigits);
-    if (next.has(digits)) next.delete(digits);
-    else next.add(digits);
-    setSelectedDigits(next);
-  };
+    // Estatísticas do Cronograma Multi-Admin
+    const schedule = session?.multiAdminSchedule;
+    const totalBatches = schedule?.batches.length || 0;
+    const completedContacts = schedule?.batches.filter((b) => b.completed).reduce((acc, b) => acc + b.contacts.length, 0) || 0;
 
-  const toggleSelectAll = (visibleList: { digits: string }[]) => {
-    const allSelected = visibleList.every((c) => selectedDigits.has(c.digits));
-    const next = new Set(selectedDigits);
-    if (allSelected) {
-      visibleList.forEach((c) => next.delete(c.digits));
-    } else {
-      visibleList.forEach((c) => next.add(c.digits));
-    }
-    setSelectedDigits(next);
-  };
+    // Lotes filtrados por dia
+    const availableDays = Array.from(new Set(schedule?.batches.map((b) => b.dayIndex) || [])).sort((a, b) => a - b);
+    const visibleBatches = schedule?.batches.filter((b) => (activeDayFilter === 'all' ? true : b.dayIndex === activeDayFilter)) || [];
 
-  // DETECÇÃO DE DUPLICIDADES EM TEMPO REAL
-  const allContacts = session?.contacts || [];
-  const digitsSet = new Set<string>();
-  let duplicateCount = 0;
-  for (const c of allContacts) {
-    if (digitsSet.has(c.digits)) duplicateCount++;
-    else digitsSet.add(c.digits);
-  }
-
-  // FILTROS
-  const adminTotal = allContacts.filter((c) => c.isAdmin).length;
-  const memberTotal = allContacts.filter((c) => !c.isAdmin).length;
-
-  const filteredContacts = allContacts.filter((c) => {
-    if (roleFilter === 'admins' && !c.isAdmin) return false;
-    if (roleFilter === 'members' && c.isAdmin) return false;
-    if (!searchTerm) return true;
-    const q = searchTerm.toLowerCase();
-    return (c.name && c.name.toLowerCase().includes(q)) || c.phone.includes(q) || c.digits.includes(q);
-  });
-
-  const displayLimit = pageSize === 10000 ? filteredContacts.length : pageSize;
-  const paginatedContacts = filteredContacts.slice(0, displayLimit);
-  const isAllVisibleSelected = paginatedContacts.length > 0 && paginatedContacts.every((c) => selectedDigits.has(c.digits));
-
-  // Estatísticas do Cronograma Multi-Admin
-  const schedule = session?.multiAdminSchedule;
-  const totalBatches = schedule?.batches.length || 0;
-  const completedContacts = schedule?.batches.filter((b) => b.completed).reduce((acc, b) => acc + b.contacts.length, 0) || 0;
-
-  // Lotes filtrados por dia
-  const availableDays = Array.from(new Set(schedule?.batches.map((b) => b.dayIndex) || [])).sort((a, b) => a - b);
-  const visibleBatches = schedule?.batches.filter((b) => (activeDayFilter === 'all' ? true : b.dayIndex === activeDayFilter)) || [];
-
-  return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-16">
-      <PageHeader
-        title="Painel de Extração & Direcionamento de Grupos"
-        description="Extraia contatos, remova administradores e repetidos, e divida a lista entre 6 números de WhatsApp para adicionar 20/dia por número com segurança total."
-        actions={
-          <div className="flex items-center gap-2">
-            <Badge tone="success" className="gap-1">
-              <Zap className="h-3.5 w-3.5" /> Modo Rápido Ativo
-            </Badge>
-            <Badge tone="info" className="gap-1">
-              <ShieldCheck className="h-3.5 w-3.5" /> Proteção Anti-Ban (6 Admins)
-            </Badge>
-          </div>
-        }
-      />
-
-      {/* GUIA VISUAL DOS 3 PASSOS SIMPLES */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className={`p-3.5 rounded-xl border flex items-center gap-3 transition-all ${allContacts.length > 0 ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-primary/10 border-primary/40'}`}>
-          <div className="h-8 w-8 rounded-lg bg-primary/20 text-primary flex items-center justify-center font-bold text-sm shrink-0">
-            1
-          </div>
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Etapa 1</div>
-            <div className="text-sm font-semibold">{allContacts.length > 0 ? `✅ ${allContacts.length} Contatos Obtidos` : 'Obter Contatos (WhatsApp/Arquivo)'}</div>
-          </div>
-        </div>
-
-        <div className={`p-3.5 rounded-xl border flex items-center gap-3 transition-all ${adminTotal === 0 && duplicateCount === 0 && allContacts.length > 0 ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-muted/40 border-border'}`}>
-          <div className="h-8 w-8 rounded-lg bg-amber-500/20 text-amber-600 flex items-center justify-center font-bold text-sm shrink-0">
-            2
-          </div>
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Etapa 2</div>
-            <div className="text-sm font-semibold">
-              {adminTotal > 0 || duplicateCount > 0 ? `⚠️ Limpar Admins e Repetidos` : 'Lista Filtrada & Sem Repetições'}
+    return (
+      <div className="space-y-6 max-w-6xl mx-auto pb-16">
+        <PageHeader
+          title="Painel de Extração & Direcionamento de Grupos"
+          description="Extraia contatos, remova administradores e repetidos, e divida a lista entre 6 números de WhatsApp para adicionar 20/dia por número com segurança total."
+          actions={
+            <div className="flex items-center gap-2">
+              <Badge tone="success" className="gap-1">
+                <Zap className="h-3.5 w-3.5" /> Modo Rápido Ativo
+              </Badge>
+              <Badge tone="info" className="gap-1">
+                <ShieldCheck className="h-3.5 w-3.5" /> Proteção Anti-Ban (6 Admins)
+              </Badge>
             </div>
-          </div>
-        </div>
+          }
+        />
 
-        <div className={`p-3.5 rounded-xl border flex items-center gap-3 transition-all ${destinationUrl ? 'bg-blue-500/10 border-blue-500/40' : 'bg-muted/40 border-border'}`}>
-          <div className="h-8 w-8 rounded-lg bg-blue-500/20 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0">
-            3
-          </div>
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Etapa 3</div>
-            <div className="text-sm font-semibold">6 Admins Adicionando 20/dia</div>
-          </div>
-        </div>
-      </div>
-
-      {/* ============================================================== */}
-      {/* ETAPA 1: OBTENÇÃO DOS CONTATOS (AUTOMÁTICO / EXCEL / COLAR) */}
-      {/* ============================================================== */}
-      <Card className="border-border">
-        <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* GUIA VISUAL DOS 3 PASSOS SIMPLES */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className={`p-3.5 rounded-xl border flex items-center gap-3 transition-all ${allContacts.length > 0 ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-primary/10 border-primary/40'}`}>
+            <div className="h-8 w-8 rounded-lg bg-primary/20 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+              1
+            </div>
             <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Upload className="h-4 w-4 text-emerald-500" />
-                Etapa 1: Obter os contatos do grupo
-              </CardTitle>
-              <CardDescription>
-                Extraia direto pelo WhatsApp Web, faça upload de arquivo (.xlsx/.csv) ou cole a lista de números.
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-lg">
-              <button
-                onClick={() => setInputTab('auto')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${inputTab === 'auto' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                ⚡ Automático WhatsApp
-              </button>
-              <button
-                onClick={() => setInputTab('file')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${inputTab === 'file' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                📁 Importar Excel/CSV
-              </button>
-              <button
-                onClick={() => setInputTab('paste')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${inputTab === 'paste' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                📋 Colar Contatos
-              </button>
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Etapa 1</div>
+              <div className="text-sm font-semibold">{allContacts.length > 0 ? `✅ ${allContacts.length} Contatos Obtidos` : 'Obter Contatos (WhatsApp/Arquivo)'}</div>
             </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          {inputTab === 'auto' && (
-            <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
-                  <Sparkles className="h-5 w-5" />
+
+          <div className={`p-3.5 rounded-xl border flex items-center gap-3 transition-all ${adminTotal === 0 && duplicateCount === 0 && allContacts.length > 0 ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-muted/40 border-border'}`}>
+            <div className="h-8 w-8 rounded-lg bg-amber-500/20 text-amber-600 flex items-center justify-center font-bold text-sm shrink-0">
+              2
+            </div>
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Etapa 2</div>
+              <div className="text-sm font-semibold">
+                {adminTotal > 0 || duplicateCount > 0 ? `⚠️ Limpar Admins e Repetidos` : 'Lista Filtrada & Sem Repetições'}
+              </div>
+            </div>
+          </div>
+
+          <div className={`p-3.5 rounded-xl border flex items-center gap-3 transition-all ${destinationUrl ? 'bg-blue-500/10 border-blue-500/40' : 'bg-muted/40 border-border'}`}>
+            <div className="h-8 w-8 rounded-lg bg-blue-500/20 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0">
+              3
+            </div>
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Etapa 3</div>
+              <div className="text-sm font-semibold">6 Admins Adicionando 20/dia</div>
+            </div>
+          </div>
+        </div>
+
+        {/* ============================================================== */}
+        {/* ETAPA 1: OBTENÇÃO DOS CONTATOS (AUTOMÁTICO / EXCEL / COLAR) */}
+        {/* ============================================================== */}
+        <Card className="border-border">
+          <CardHeader className="pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Upload className="h-4 w-4 text-emerald-500" />
+                  Etapa 1: Obter os contatos do grupo
+                </CardTitle>
+                <CardDescription>
+                  Extraia direto pelo WhatsApp Web, faça upload de arquivo (.xlsx/.csv) ou cole a lista de números.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-lg">
+                <button
+                  onClick={() => setInputTab('auto')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${inputTab === 'auto' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  ⚡ Automático WhatsApp
+                </button>
+                <button
+                  onClick={() => setInputTab('file')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${inputTab === 'file' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  📁 Importar Excel/CSV
+                </button>
+                <button
+                  onClick={() => setInputTab('paste')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${inputTab === 'paste' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  📋 Colar Contatos
+                </button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {inputTab === 'auto' && (
+              <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-foreground">
+                      Extração Direta do WhatsApp Web Ativa
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      Ao clicar em <strong>&ldquo;Extrair Grupo&rdquo;</strong> no WhatsApp Web, os contatos caem aqui automaticamente em tempo real!
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-sm font-bold text-foreground">
-                    Extração Direta do WhatsApp Web Ativa
-                  </h4>
-                  <p className="text-xs text-muted-foreground">
-                    Ao clicar em <strong>&ldquo;Extrair Grupo&rdquo;</strong> no WhatsApp Web, os contatos caem aqui automaticamente em tempo real!
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link to="/extrair-whatsapp" className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'gap-1.5')}>
+                    <Sparkles className="h-3.5 w-3.5" /> Como Extrair
+                  </Link>
+                  <a
+                    href="https://web.whatsapp.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Abrir WhatsApp Web
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {inputTab === 'file' && (
+              <div className="space-y-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  id="gep-file-input"
+                />
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-primary/40 hover:border-primary bg-primary/5 rounded-xl p-6 text-center cursor-pointer transition-colors"
+                >
+                  <FileSpreadsheet className="h-8 w-8 text-primary mx-auto mb-2" />
+                  <p className="text-sm font-bold">
+                    {isProcessingFile ? 'Lendo e processando arquivo...' : 'Clique para selecionar seu arquivo Excel (.xlsx, .xls) ou CSV'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Reconhece automaticamente colunas de Nome, Telefone e Administradores. Sem limite de contatos.
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Link to="/extrair-whatsapp" className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'gap-1.5')}>
-                  <Sparkles className="h-3.5 w-3.5" /> Como Extrair
-                </Link>
-                <a
-                  href="https://web.whatsapp.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" /> Abrir WhatsApp Web
-                </a>
-              </div>
-            </div>
-          )}
+            )}
 
-          {inputTab === 'file' && (
-            <div className="space-y-3">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                onChange={handleFileUpload}
-                className="hidden"
-                id="gep-file-input"
-              />
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-primary/40 hover:border-primary bg-primary/5 rounded-xl p-6 text-center cursor-pointer transition-colors"
-              >
-                <FileSpreadsheet className="h-8 w-8 text-primary mx-auto mb-2" />
-                <p className="text-sm font-bold">
-                  {isProcessingFile ? 'Lendo e processando arquivo...' : 'Clique para selecionar seu arquivo Excel (.xlsx, .xls) ou CSV'}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Reconhece automaticamente colunas de Nome, Telefone e Administradores. Sem limite de contatos.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {inputTab === 'paste' && (
-            <div className="space-y-3">
-              <textarea
-                rows={3}
-                placeholder="Cole os telefones aqui (um por linha ou separados por vírgula). Ex:&#10;5511999999999&#10;João; 5584999998888"
-                value={pasteInput}
-                onChange={(e) => setPasteInput(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-input bg-background font-mono focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-              <div className="flex justify-end">
-                <Button size="sm" onClick={handleImportPastedText} className="gap-1.5">
-                  <ClipboardPaste className="h-3.5 w-3.5" /> Carregar Telefones
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ============================================================== */}
-      {/* SINCRONIZAÇÃO DIRETA COM O GOOGLE CONTATOS (3msolucoes01@gmail.com) */}
-      {/* ============================================================== */}
-      <Card className="border-blue-500/40 bg-gradient-to-r from-blue-950/20 via-indigo-950/20 to-slate-900 shadow-md">
-        <CardContent className="p-4 sm:p-5">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-start sm:items-center gap-3.5">
-              <div className="h-11 w-11 rounded-xl bg-blue-500/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0 shadow-inner">
-                <span className="text-2xl">👤</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-                    Sincronizar no Google Contatos / Agenda do Celular
-                  </h4>
-                  {isEditingEmail ? (
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="email"
-                        value={googleEmail}
-                        onChange={(e) => setGoogleEmail(e.target.value)}
-                        className="px-2 py-0.5 text-xs bg-slate-900 border border-blue-500 rounded text-blue-200 font-mono"
-                        placeholder="email@gmail.com"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => setIsEditingEmail(false)}
-                        className="text-[11px] text-blue-400 hover:text-blue-300 font-bold px-1.5 py-0.5 rounded bg-blue-500/20"
-                      >
-                        OK
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setIsEditingEmail(true)}
-                      className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30 transition-colors cursor-pointer"
-                      title="Clique para alterar o e-mail do Google Contatos"
-                    >
-                      {googleEmail} ✏️
-                    </button>
-                  )}
+            {inputTab === 'paste' && (
+              <div className="space-y-3">
+                <textarea
+                  rows={3}
+                  placeholder="Cole os telefones aqui (um por linha ou separados por vírgula). Ex:&#10;5511999999999&#10;João; 5584999998888"
+                  value={pasteInput}
+                  onChange={(e) => setPasteInput(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-input bg-background font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={handleImportPastedText} className="gap-1.5">
+                    <ClipboardPaste className="h-3.5 w-3.5" /> Carregar Telefones
+                  </Button>
                 </div>
-                <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                  Baixe a lista oficial formatada e abra o <strong>Google Contatos</strong> na conta <strong>{googleEmail}</strong> para importar com 1 clique. Todos os contatos aparecem instantaneamente na sua agenda do celular e no WhatsApp sem restrições de convite!
-                </p>
               </div>
-            </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ============================================================== */}
+        {/* SINCRONIZAÇÃO DIRETA COM O GOOGLE CONTATOS (3msolucoes01@gmail.com) */}
+        {/* ============================================================== */}
+        <Card className="border-blue-500/40 bg-gradient-to-r from-blue-950/20 via-indigo-950/20 to-slate-900 shadow-md">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="h-11 w-11 rounded-xl bg-blue-500/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0 shadow-inner">
+                  <span className="text-2xl">👤</span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                      Sincronizar no Google Contatos / Agenda do Celular
+                    </h4>
+                    {isEditingEmail ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="email"
+                          value={googleEmail}
+                          onChange={(e) => setGoogleEmail(e.target.value)}
+                          className="px-2 py-0.5 text-xs bg-slate-900 border border-blue-500 rounded text-blue-200 font-mono"
+                          placeholder="email@gmail.com"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => setIsEditingEmail(false)}
+                          className="text-[11px] text-blue-400 hover:text-blue-300 font-bold px-1.5 py-0.5 rounded bg-blue-500/20"
+                        >
+                          OK
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setIsEditingEmail(true)}
+                        className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30 transition-colors cursor-pointer"
+                        title="Clique para alterar o e-mail do Google Contatos"
+                      >
+                        {googleEmail} ✏️
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                    Baixe a lista oficial formatada e abra o <strong>Google Contatos</strong> na conta <strong>{googleEmail}</strong> para importar com 1 clique. Todos os contatos aparecem instantaneamente na sua agenda do celular e no WhatsApp sem restrições de convite!
+                  </p>
+                </div>
+              </div>
 
             <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
               <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-lg text-xs font-medium border border-blue-500/30 shadow-inner">
@@ -910,11 +908,10 @@ export function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setExportFormat('with_55')}
-                  className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                    exportFormat === 'with_55'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${exportFormat === 'with_55'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                    }`}
                   title="Formato Internacional completo com +55"
                 >
                   🇧🇷 COM +55
@@ -922,11 +919,10 @@ export function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setExportFormat('without_55')}
-                  className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                    exportFormat === 'without_55'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${exportFormat === 'without_55'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                    }`}
                   title="Formato Nacional sem +55 (DDD + 9 dígitos)"
                 >
                   🇧🇷 SEM +55
@@ -1060,8 +1056,9 @@ export function DashboardPage() {
         </div>
       </Dialog>
 
-      {/* SE AINDA NÃO HÁ CONTATOS IMPORTADOS: MOSTRA O ROBÔ PARA JÁ PODER CONECTAR OS CHIPS */}
-      {allContacts.length === 0 && (
+        {/* SE AINDA NÃO HÁ CONTATOS IMPORTADOS: MOSTRA O ROBÔ PARA JÁ PODER CONECTAR OS CHIPS */ }
+    {
+      allContacts.length === 0 && (
         <div className="space-y-4">
           <WhatsAppMultiChipRobot
             destinationUrl={destinationUrl}
@@ -1071,12 +1068,14 @@ export function DashboardPage() {
             duplicateCount={0}
           />
         </div>
-      )}
+      )
+    }
 
-      {/* ============================================================== */}
-      {/* ETAPA 2 & 3: CONTATOS CARREGADOS, LIMPEZA E CRONOGRAMA 6 ADMINS */}
-      {/* ============================================================== */}
-      {allContacts.length > 0 && (
+    {/* ============================================================== */ }
+    {/* ETAPA 2 & 3: CONTATOS CARREGADOS, LIMPEZA E CRONOGRAMA 6 ADMINS */ }
+    {/* ============================================================== */ }
+    {
+      allContacts.length > 0 && (
         <div className="space-y-6">
           {/* RESUMO DOS CONTATOS */}
           <div className="grid md:grid-cols-4 gap-4">
@@ -1647,11 +1646,10 @@ export function DashboardPage() {
                       <button
                         type="button"
                         onClick={() => setExportFormat('with_55')}
-                        className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                          exportFormat === 'with_55'
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
+                        className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${exportFormat === 'with_55'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                          }`}
                         title="Exportar no formato internacional (+55 11 99999-9999)"
                       >
                         +55
@@ -1659,11 +1657,10 @@ export function DashboardPage() {
                       <button
                         type="button"
                         onClick={() => setExportFormat('without_55')}
-                        className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                          exportFormat === 'without_55'
-                            ? 'bg-blue-600 text-white shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
+                        className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${exportFormat === 'without_55'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                          }`}
                         title="Exportar no formato nacional sem +55 ((11) 99999-9999)"
                       >
                         Sem 55
