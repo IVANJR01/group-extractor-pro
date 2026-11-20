@@ -107,9 +107,12 @@ class RobotManager {
     if (this.sockets.has(chipIndex)) {
       try {
         const oldSock = this.sockets.get(chipIndex);
+        oldSock.ev.removeAllListeners();
         oldSock.end(undefined);
       } catch {}
       this.sockets.delete(chipIndex);
+      // Pausa para dar tempo ao WhatsApp fechar a conexão antiga no servidor
+      await new Promise((r) => setTimeout(r, 1000));
     }
 
     this.userDisconnectedChips.delete(chipIndex);
@@ -170,27 +173,37 @@ class RobotManager {
         chip.error = null;
         this.addLog(`🟢 WhatsApp ${chip.name} (${phone}) conectado com sucesso!`, 'success');
       } else if (connection === 'close') {
+        // Se este socket já foi substituído por outro mais novo, ignora o fechamento antigo
+        if (this.sockets.get(chipIndex) !== sock) {
+          return;
+        }
+
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        const isReplaced = statusCode === DisconnectReason.connectionReplaced || statusCode === 440;
+        const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 403;
+        const shouldReconnect = !isReplaced && !isLoggedOut;
 
         chip.status = 'disconnected';
         chip.qrCodeDataUrl = null;
         chip.pairingCode = null;
 
-        if (statusCode === DisconnectReason.loggedOut) {
+        if (isLoggedOut) {
           chip.phone = '';
           try {
             fs.rmSync(sessionDir, { recursive: true, force: true });
           } catch {}
           this.addLog(`🔴 WhatsApp ${chip.name} desconectado (Sessão encerrada no celular).`, 'warning');
+        } else if (isReplaced) {
+          // Erro 440: Outra sessão assumiu a conexão ou foi substituída. Não reconectar em loop.
+          this.addLog(`⚠️ WhatsApp ${chip.name} desconectado (Código 440 - Sessão substituída). Aguarde antes de reconectar.`, 'warning');
         } else {
           this.addLog(`⚠️ WhatsApp ${chip.name} desconectado temporariamente (Código ${statusCode || 'n/a'}).`, 'info');
           if (shouldReconnect && !this.userDisconnectedChips.has(chipIndex)) {
             setTimeout(() => {
-              if (this.chips[chipIndex].status === 'disconnected' && !this.userDisconnectedChips.has(chipIndex)) {
+              if (this.chips[chipIndex].status === 'disconnected' && !this.userDisconnectedChips.has(chipIndex) && this.sockets.get(chipIndex) === sock) {
                 this.connectChip(chipIndex).catch(() => {});
               }
-            }, 5000);
+            }, 8000);
           }
         }
       }
