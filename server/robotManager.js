@@ -543,7 +543,12 @@ class RobotManager {
       } catch (err) {
         this.activeTask.failedCount++;
         const msg = String(err.message || err);
-        if (msg.includes('bad-request')) {
+        if (msg.includes('account_reachout_restricted')) {
+          this.addLog(
+            `⚠️ [${selectedChip.name}] Restrição temporária da Meta (account_reachout_restricted): Este número não pode adicionar contatos desconhecidos fora da agenda. Conecte outro WhatsApp (Chip 2/3) ou salve os contatos na agenda do celular via arquivo VCF!`,
+            'warning'
+          );
+        } else if (msg.includes('bad-request')) {
           this.addLog(
             `❌ [${selectedChip.name}] O WhatsApp recusou a adição de ${displayName} (bad-request).`,
             'error'
