@@ -9,6 +9,19 @@ if (!fs.existsSync(SESSIONS_DIR)) {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 }
 
+// DDDs oficiais da Anatel no Brasil (67 códigos de área)
+const VALID_BR_DDDS = new Set([
+  '11', '12', '13', '14', '15', '16', '17', '18', '19',
+  '21', '22', '24', '27', '28',
+  '31', '32', '33', '34', '35', '37', '38',
+  '41', '42', '43', '44', '45', '46', '47', '48', '49',
+  '51', '53', '54', '55',
+  '61', '62', '63', '64', '65', '66', '67', '68', '69',
+  '71', '73', '74', '75', '77', '79',
+  '81', '82', '83', '84', '85', '86', '87', '88', '89',
+  '91', '92', '93', '94', '95', '96', '97', '98', '99'
+]);
+
 class RobotManager {
   constructor() {
     this.chips = Array.from({ length: 6 }, (_, i) => ({
@@ -367,6 +380,11 @@ class RobotManager {
         digits = `55${ddd}9${rest}`;
         phoneCount++;
       } else if (digits.length === 13 && digits.startsWith('55')) {
+        const ddd = digits.slice(2, 4);
+        if (!VALID_BR_DDDS.has(ddd)) {
+          // Descarta números com DDD inexistente ou LIDs antigos fatiados
+          continue;
+        }
         phoneCount++;
       } else if (digits.length >= 14) {
         isLid = true;
@@ -555,12 +573,26 @@ class RobotManager {
         }
       } catch (err) {
         const msg = String(err.message || err);
-        if (msg.includes('account_reachout_restricted') || msg.includes('not-authorized') || msg.includes('bad-request')) {
+        // Só tenta enviar convite no privado se for estritamente restrição de alcance (account_reachout_restricted ou not-authorized).
+        // NUNCA tenta enviar mensagem privada se for 'bad-request' ou JID inválido para evitar desconexão 503 da Meta!
+        if (msg.includes('account_reachout_restricted') || msg.includes('not-authorized')) {
           this.addLog(
-            `💡 [${selectedChip.name}] Adição direta restrita pela Meta para ${displayName}. Acionando entrega automática de convite oficial no privado...`,
+            `💡 [${selectedChip.name}] Adição direta restrita pela Meta para ${displayName}. Verificando cadastro no WhatsApp...`,
             'info'
           );
           try {
+            // Verifica no WhatsApp antes de enviar mensagem no privado
+            let onWa = null;
+            try {
+              onWa = await sock.onWhatsApp(participantJid);
+            } catch {}
+
+            if (!onWa || !onWa[0]?.exists) {
+              this.activeTask.failedCount++;
+              this.addLog(`⚠️ [${selectedChip.name}] ${displayName}: Número não possui WhatsApp ativo. Convite não enviado para preservar a conta.`, 'warning');
+              continue;
+            }
+
             const inviteUrl = this.activeTask.inviteUrl || (this.activeTask.inviteCode ? `https://chat.whatsapp.com/${this.activeTask.inviteCode}` : 'https://chat.whatsapp.com/Czqp9FJaYnc85U2eXnuKJN');
             const inviteMsg = `Olá! Você foi convidado(a) para participar do nosso grupo *${this.activeTask.groupName}*:\n\n${inviteUrl}`;
 

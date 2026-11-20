@@ -46,6 +46,8 @@ import {
   generateMultiAdminSchedule,
   toggleBatchCompleted,
   downloadVCardFile,
+  downloadGoogleContactsCSV,
+  openGoogleContactsImport,
   type ExtractedGroupSession,
   type SavedContact,
 } from '@/services/localExtractorStorage';
@@ -446,6 +448,32 @@ export function DashboardPage() {
     toast('Planilha Excel (.xlsx) baixada!', 'info');
   };
 
+  // SINCRONIZAR COM GOOGLE CONTATOS (3msolucoes01@gmail.com)
+  const [googleEmail, setGoogleEmail] = useState('3msolucoes01@gmail.com');
+  const [isEditingEmail, setIsEditingEmail] = useState(false);
+
+  const handleSyncGoogleContacts = () => {
+    if (!session || session.contacts.length === 0) {
+      toast('Carregue ou extraia contatos antes de sincronizar.', 'error');
+      return;
+    }
+    // 1. Gera e baixa o arquivo CSV formatado especialmente para o Google Contacts
+    downloadGoogleContactsCSV(session.groupName || '3mpro', session.contacts, '3MPRO');
+    // 2. Abre a tela de importação do Google Contacts na conta informada
+    openGoogleContactsImport(googleEmail);
+    // 3. Notifica o usuário
+    toast(`📥 Arquivo baixado e página do Google Contatos aberta na conta ${googleEmail}! Clique em "Importar" no Google e selecione o arquivo.`, 'info');
+  };
+
+  const handleDownloadVCFDirect = () => {
+    if (!session || session.contacts.length === 0) {
+      toast('Carregue ou extraia contatos antes de baixar o arquivo VCF.', 'error');
+      return;
+    }
+    downloadVCardFile(session.groupName || 'contatos_agenda_3mpro', session.contacts);
+    toast('📱 Arquivo .VCF baixado! Envie para o WhatsApp do seu celular ou toque nele para salvar na agenda.', 'info');
+  };
+
   const handleSendSingleInvite = (c: { digits: string; name: string }) => {
     markContactInvited(c.digits, true);
     setSession(getActiveSession());
@@ -766,6 +794,78 @@ export function DashboardPage() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* ============================================================== */}
+      {/* SINCRONIZAÇÃO DIRETA COM O GOOGLE CONTATOS (3msolucoes01@gmail.com) */}
+      {/* ============================================================== */}
+      <Card className="border-blue-500/40 bg-gradient-to-r from-blue-950/20 via-indigo-950/20 to-slate-900 shadow-md">
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="h-11 w-11 rounded-xl bg-blue-500/20 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0 shadow-inner">
+                <span className="text-2xl">👤</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                    Sincronizar no Google Contatos / Agenda do Celular
+                  </h4>
+                  {isEditingEmail ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="email"
+                        value={googleEmail}
+                        onChange={(e) => setGoogleEmail(e.target.value)}
+                        className="px-2 py-0.5 text-xs bg-slate-900 border border-blue-500 rounded text-blue-200 font-mono"
+                        placeholder="email@gmail.com"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => setIsEditingEmail(false)}
+                        className="text-[11px] text-blue-400 hover:text-blue-300 font-bold px-1.5 py-0.5 rounded bg-blue-500/20"
+                      >
+                        OK
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setIsEditingEmail(true)}
+                      className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30 transition-colors cursor-pointer"
+                      title="Clique para alterar o e-mail do Google Contatos"
+                    >
+                      {googleEmail} ✏️
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                  Baixe a lista oficial formatada e abra o <strong>Google Contatos</strong> na conta <strong>{googleEmail}</strong> para importar com 1 clique. Todos os contatos aparecem instantaneamente na sua agenda do celular e no WhatsApp sem restrições de convite!
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+              <Button
+                size="sm"
+                onClick={handleSyncGoogleContacts}
+                disabled={allContacts.length === 0}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold gap-2 shadow-lg cursor-pointer h-9 px-4"
+              >
+                <span>📥</span> Sincronizar com {googleEmail.split('@')[0]}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDownloadVCFDirect}
+                disabled={allContacts.length === 0}
+                className="border-slate-700 hover:bg-slate-800 text-slate-200 gap-1.5 font-bold cursor-pointer h-9 px-3"
+                title="Baixar arquivo VCF para abrir direto no celular"
+              >
+                <span>📱</span> Baixar .VCF
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

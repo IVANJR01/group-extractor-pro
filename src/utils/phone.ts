@@ -200,7 +200,7 @@ export function formatPhoneBR(e164: string | null | undefined): string {
 
 /**
  * Normaliza e corrige telefones para o padrão de celular brasileiro real (13 dígitos com DDI 55 + DDD + 9).
- * Injeta o 9º dígito quando ausente e descarta IDs de privacidade (LIDs).
+ * Injeta o 9º dígito quando ausente, valida DDD oficial e descarta IDs de privacidade (LIDs).
  */
 export function normalizeBrazilianPhoneDigits(raw: string): { valid: boolean; digits: string; formatted: string; isLid: boolean } {
   if (!raw) return { valid: false, digits: '', formatted: '', isLid: false };
@@ -211,7 +211,7 @@ export function normalizeBrazilianPhoneDigits(raw: string): { valid: boolean; di
     return { valid: false, digits: '', formatted: '', isLid: true };
   }
 
-  // Se tiver mais de 13 dígitos mesmo começando com 55: é LID ou dado inválido
+  // Se tiver mais de 13 dígitos mesmo começando com 55: é LID ou dado criptográfico
   if (digits.length > 13) {
     return { valid: false, digits: '', formatted: '', isLid: true };
   }
@@ -239,6 +239,19 @@ export function normalizeBrazilianPhoneDigits(raw: string): { valid: boolean; di
       }
     } else if (digits.length === 11) {
       digits = `55${digits}`;
+    }
+  }
+
+  // Validação estrita do DDD brasileiro oficial da ANATEL
+  if (digits.startsWith('55') && digits.length === 13) {
+    const areaCode = digits.slice(2, 4);
+    if (!isValidDDD(areaCode)) {
+      return { valid: false, digits: '', formatted: '', isLid: true };
+    }
+  } else if (digits.length >= 10 && digits.length <= 11) {
+    const areaCode = digits.slice(0, 2);
+    if (!isValidDDD(areaCode)) {
+      return { valid: false, digits: '', formatted: '', isLid: true };
     }
   }
 

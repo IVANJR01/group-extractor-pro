@@ -75,12 +75,25 @@
     return 0;
   }
 
+  // DDDs oficiais da Anatel no Brasil (67 códigos de área)
+  const VALID_BR_DDDS = new Set([
+    '11', '12', '13', '14', '15', '16', '17', '18', '19',
+    '21', '22', '24', '27', '28',
+    '31', '32', '33', '34', '35', '37', '38',
+    '41', '42', '43', '44', '45', '46', '47', '48', '49',
+    '51', '53', '54', '55',
+    '61', '62', '63', '64', '65', '66', '67', '68', '69',
+    '71', '73', '74', '75', '77', '79',
+    '81', '82', '83', '84', '85', '86', '87', '88', '89',
+    '91', '92', '93', '94', '95', '96', '97', '98', '99'
+  ]);
+
   function cleanPhoneNumber(raw) {
     if (!raw) return '';
     let digits = String(raw).replace(/@.*$/, '').replace(/\D/g, '');
 
-    // Descartar LIDs (14-15 dígitos que não começam com 55 ou são identificadores criptográficos)
-    if (digits.length >= 14 && !digits.startsWith('55')) return '';
+    // Descartar LIDs (14-15 dígitos são identificadores de privacidade do WhatsApp)
+    if (digits.length >= 14) return '';
 
     // Normalização brasileira inteligente (Injeção automática do 9º dígito)
     if (digits.startsWith('55')) {
@@ -94,6 +107,11 @@
           digits = `55${ddd}9${sub}`;
         }
       }
+      // Validação de DDD oficial: descarta LIDs fatiados ou números corrompidos
+      if (digits.length === 13) {
+        const ddd = digits.slice(2, 4);
+        if (!VALID_BR_DDDS.has(ddd)) return '';
+      }
     } else {
       // Sem código de país 55
       if (digits.length === 10) {
@@ -106,6 +124,10 @@
         }
       } else if (digits.length === 11) {
         digits = `55${digits}`;
+      }
+      if (digits.startsWith('55') && digits.length === 13) {
+        const ddd = digits.slice(2, 4);
+        if (!VALID_BR_DDDS.has(ddd)) return '';
       }
     }
 

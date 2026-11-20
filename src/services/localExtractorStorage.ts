@@ -48,11 +48,44 @@ export interface ExtractedGroupSession {
 
 const STORAGE_KEY = 'gep_active_extraction_session';
 
+/**
+ * Sanitiza e normaliza contatos salvos:
+ * 1. Remove LIDs e identificadores de privacidade
+ * 2. Garante o 9º dígito obrigatório em celulares brasileiros
+ * 3. Valida se o DDD pertence à Anatel
+ * 4. Deduplica por dígitos reais
+ */
+export function sanitizeSavedContacts(contacts: SavedContact[]): SavedContact[] {
+  if (!Array.isArray(contacts)) return [];
+  const result: SavedContact[] = [];
+  const seen = new Set<string>();
+
+  for (const c of contacts) {
+    const norm = normalizeBrazilianPhoneDigits(c.digits || c.phone);
+    if (!norm.valid || norm.isLid) continue;
+    if (seen.has(norm.digits)) continue;
+    seen.add(norm.digits);
+
+    result.push({
+      ...c,
+      digits: norm.digits,
+      phone: norm.formatted,
+    });
+  }
+
+  return result;
+}
+
 export function getActiveSession(): ExtractedGroupSession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as ExtractedGroupSession;
+    const session = JSON.parse(raw) as ExtractedGroupSession;
+    if (session && Array.isArray(session.contacts)) {
+      session.contacts = sanitizeSavedContacts(session.contacts);
+      session.totalContacts = session.contacts.length;
+    }
+    return session;
   } catch {
     return null;
   }
@@ -60,6 +93,10 @@ export function getActiveSession(): ExtractedGroupSession | null {
 
 export function saveActiveSession(session: ExtractedGroupSession): void {
   try {
+    if (session && Array.isArray(session.contacts)) {
+      session.contacts = sanitizeSavedContacts(session.contacts);
+      session.totalContacts = session.contacts.length;
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
   } catch (e) {
     console.error('Erro ao salvar sessão local:', e);
@@ -182,6 +219,44 @@ export function downloadVCardFile(fileName: string, contacts: { name?: string; d
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/**
+ * GERA CSV OFICIAL DO GOOGLE CONTATOS
+ * Formato padrão oficial internacional para importação imediata em contacts.google.com.
+ */
+export function generateGoogleContactsCSV(contacts: SavedContact[], label: string = '3MPRO'): string {
+  const headers = ['Name', 'Given Name', 'Family Name', 'Group Membership', 'Phone 1 - Type', 'Phone 1 - Value'];
+  const rows: string[][] = [headers];
+
+  contacts.forEach((c, i) => {
+    const norm = normalizeBrazilianPhoneDigits(c.digits || c.phone);
+    const cleanDigits = norm.valid ? norm.digits : c.digits.replace(/\D/g, '');
+    const ddd = cleanDigits.startsWith('55') ? cleanDigits.slice(2, 4) : cleanDigits.slice(0, 2);
+    const name = c.name?.trim() ? c.name.trim() : `Lead #${String(i + 1).padStart(3, '0')} (${ddd})`;
+    const phone = `+${cleanDigits}`;
+    rows.push([name, name, `(${ddd})`, `* myContacts ::: ${label}`, 'Mobile', phone]);
+  });
+
+  return '\uFEFF' + rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+}
+
+export function downloadGoogleContactsCSV(fileName: string, contacts: SavedContact[], label: string = '3MPRO'): void {
+  const content = generateGoogleContactsCSV(contacts, label);
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${fileName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_google_contatos.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function openGoogleContactsImport(email: string = '3msolucoes01@gmail.com'): void {
+  const url = `https://contacts.google.com/import?authuser=${encodeURIComponent(email)}`;
+  window.open(url, '_blank');
 }
 
 /**
