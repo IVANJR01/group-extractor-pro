@@ -131,10 +131,16 @@ export function WhatsAppMultiChipRobot({
 
   // CONECTAR POR CÓDIGO DE EMPARELHAMENTO (SEM CÂMERA)
   const handleGeneratePairingCode = async () => {
-    const clean = pairingPhone.replace(/\D/g, '');
+    let clean = pairingPhone.replace(/\D/g, '');
     if (clean.length < 10) {
-      toast('Por favor, informe um número de telefone com DDD válido. Ex: 554398370727', 'error');
+      toast('Por favor, informe um número de telefone com DDD válido. Ex: 4398370727 ou 554398370727', 'error');
       return;
+    }
+
+    // Auto-adicionar código do Brasil (55) se o número tiver 10-11 dígitos
+    if (clean.length <= 11 && !clean.startsWith('55')) {
+      clean = '55' + clean;
+      toast(`📱 Código do país 55 adicionado automaticamente → ${clean}`, 'info');
     }
 
     setIsGeneratingCode(true);
@@ -153,7 +159,7 @@ export function WhatsAppMultiChipRobot({
         throw new Error(data.error || 'Falha ao solicitar código');
       }
 
-      toast(`⚡ Código gerado para o número ${clean}! Digite no WhatsApp do celular.`, 'info');
+      toast(`⚡ Código gerado para ${clean}! Digite no WhatsApp do celular.`, 'info');
       fetchStatus();
     } catch (err: any) {
       toast(err.message || 'Erro ao gerar código de emparelhamento', 'error');
@@ -520,7 +526,7 @@ export function WhatsAppMultiChipRobot({
             <div className="flex flex-col sm:flex-row gap-2.5">
               <input
                 type="text"
-                placeholder="Ex: 5581920084102"
+                placeholder="Ex: 4398370727 (o 55 é adicionado automático)"
                 value={pairingPhone}
                 onChange={(e) => setPairingPhone(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleGeneratePairingCode()}

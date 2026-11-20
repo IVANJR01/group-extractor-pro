@@ -175,7 +175,12 @@ class RobotManager {
 
     // Se o usuário solicitou emparelhamento por número de telefone (Sem Câmera)
     if (targetPhoneNumber && !sock.authState.creds.registered) {
-      const cleanPhone = targetPhoneNumber.replace(/\D/g, '');
+      let cleanPhone = targetPhoneNumber.replace(/\D/g, '');
+      // Auto-adicionar código do Brasil (55) se o número tiver 10-11 dígitos (DDD + telefone)
+      if (cleanPhone.length <= 11 && !cleanPhone.startsWith('55')) {
+        this.addLog(`📱 Número ${cleanPhone} detectado sem código do país. Adicionando 55 automaticamente → ${('55' + cleanPhone)}`, 'info');
+        cleanPhone = '55' + cleanPhone;
+      }
       chip.status = 'connecting';
       // Aguarda o socket estabelecer o canal inicial com o WhatsApp
       await new Promise((r) => setTimeout(r, 2000));
