@@ -541,19 +541,29 @@ class RobotManager {
           this.addLog(`⚠️ [${selectedChip.name}] Falha ao adicionar ${displayName} (Código ${statusCode}).`, 'warning');
         }
       } catch (err) {
-        this.activeTask.failedCount++;
         const msg = String(err.message || err);
-        if (msg.includes('account_reachout_restricted')) {
+        if (msg.includes('account_reachout_restricted') || msg.includes('not-authorized') || msg.includes('bad-request')) {
           this.addLog(
-            `⚠️ [${selectedChip.name}] Restrição temporária da Meta (account_reachout_restricted): Este número não pode adicionar contatos desconhecidos fora da agenda. Conecte outro WhatsApp (Chip 2/3) ou salve os contatos na agenda do celular via arquivo VCF!`,
-            'warning'
+            `💡 [${selectedChip.name}] Adição direta restrita pela Meta para ${displayName}. Acionando entrega automática de convite oficial no privado...`,
+            'info'
           );
-        } else if (msg.includes('bad-request')) {
-          this.addLog(
-            `❌ [${selectedChip.name}] O WhatsApp recusou a adição de ${displayName} (bad-request).`,
-            'error'
-          );
+          try {
+            const inviteUrl = this.activeTask.inviteUrl || (this.activeTask.inviteCode ? `https://chat.whatsapp.com/${this.activeTask.inviteCode}` : 'https://chat.whatsapp.com/Czqp9FJaYnc85U2eXnuKJN');
+            const inviteMsg = `Olá! Você foi convidado(a) para participar do nosso grupo *${this.activeTask.groupName}*:\n\n${inviteUrl}`;
+
+            await sock.sendMessage(participantJid, { text: inviteMsg });
+            selectedChip.addedToday++;
+            this.activeTask.successCount++;
+            this.addLog(
+              `✉️ [${selectedChip.name}] Restrição contornada! Convite oficial entregue no privado com sucesso para ${displayName}! (${selectedChip.addedToday}/${dailyLimitPerChip} hoje)`,
+              'success'
+            );
+          } catch (invErr) {
+            this.activeTask.failedCount++;
+            this.addLog(`⚠️ [${selectedChip.name}] Falha ao enviar convite privado para ${displayName}: ${invErr.message}`, 'warning');
+          }
         } else {
+          this.activeTask.failedCount++;
           this.addLog(`❌ [${selectedChip.name}] Erro ao adicionar ${displayName}: ${msg}`, 'error');
         }
       }
