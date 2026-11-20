@@ -30,31 +30,36 @@
 
   // Capturar nome do grupo ativo
   function getGroupName() {
-    const drawer = document.querySelector('div[data-testid="chat-info-drawer"], div[tabindex="-1"]');
+    // 1. Prioriza o cabeçalho principal da conversa ativa (#main header)
+    const header = document.querySelector('#main header, div[data-testid="conversation-header"], header');
+    if (header) {
+      const titleEl = header.querySelector('div[role="button"] span[title], span[data-testid="conversation-info-header-chat-title"], span[title]');
+      if (titleEl) {
+        const val = (titleEl.getAttribute('title') || titleEl.textContent || '').trim();
+        if (val && !val.includes(',') && !val.includes('+') && !/wa-wordmark|wordmark/i.test(val)) {
+          return val;
+        }
+      }
+      for (const s of header.querySelectorAll('span[dir="auto"], span[title]')) {
+        const t = (s.getAttribute('title') || s.textContent || '').trim();
+        if (t && !t.includes(',') && !t.includes('+') && !t.toLowerCase().includes('online') && !/wa-wordmark|wordmark/i.test(t) && t.length > 1) {
+          return t;
+        }
+      }
+    }
+
+    // 2. Busca no painel lateral de dados do grupo
+    const drawer = document.querySelector('div[data-testid="chat-info-drawer"]');
     if (drawer) {
       const candidates = drawer.querySelectorAll('h2, span[dir="auto"]');
       for (const el of candidates) {
         const text = (el.getAttribute('title') || el.textContent || '').trim();
-        if (text && !text.includes('Dados do grupo') && !text.includes('membros') && text.length > 2) {
+        if (text && !text.includes('Dados do grupo') && !text.includes('membros') && !/wa-wordmark|wordmark/i.test(text) && text.length > 2) {
           return text;
         }
       }
     }
 
-    const header = document.querySelector('#main header, div[data-testid="conversation-header"], header');
-    if (header) {
-      const titleEl = header.querySelector('div[role="button"] span[title], span[data-testid="conversation-info-header-chat-title"], span[title]');
-      if (titleEl) {
-        const val = titleEl.getAttribute('title') || titleEl.textContent;
-        if (val && !val.includes(',') && !val.includes('+')) return val.trim();
-      }
-      for (const s of header.querySelectorAll('span[dir="auto"]')) {
-        const t = (s.getAttribute('title') || s.textContent || '').trim();
-        if (t && !t.includes(',') && !t.includes('+') && !t.toLowerCase().includes('online') && t.length > 1) {
-          return t;
-        }
-      }
-    }
     return 'Grupo WhatsApp';
   }
 
@@ -169,30 +174,77 @@
     return '';
   }
 
-  function extractNameFromRow(row, rawPhone, digits) {
-    // 1. Procura span com apelido / recado (começa com ~)
-    for (const span of row.querySelectorAll('span[title], span[dir="auto"], span')) {
-      const t = (span.getAttribute('title') || span.textContent || '').trim();
-      if (t.startsWith('~') && t.length > 1) {
-        return cleanName(t.slice(1).trim(), digits);
-      }
+  function cleanName(raw, digits) {
+    if (!raw) return '';
+    let n = String(raw).trim();
+    // Remove ~ no início
+    n = n.replace(/^~+\s*/, '');
+    // Remove o telefone se estiver junto do nome (ex: "Adriana +55 91 9809-4310")
+    n = n.replace(/\+?\s*\d{1,3}[\d\s().-]{7,25}\d/g, '').trim();
+    // Remove palavras de status / sistema
+    n = n.replace(/\b(admin do grupo|admin|administrador|superadmin|membro)\b/gi, '').trim();
+    // Remove pontuações soltas nas bordas
+    n = n.replace(/^[-–—|,;:\s]+|[-–—|,;:\s]+$/g, '').trim();
+
+    // Se só sobraram dígitos de telefone ou ficou vazio, não é um nome
+    const onlyDigits = n.replace(/\D/g, '');
+    if (!n || (onlyDigits.length >= 8 && digits && onlyDigits.includes(digits.slice(-8)))) {
+      return '';
     }
-    // 2. Qualquer span que não seja telefone nem admin
-    for (const span of row.querySelectorAll('span[title], span[dir="auto"]')) {
-      const t = (span.getAttribute('title') || span.textContent || '').trim();
-      if (t && !t.includes('+') && !t.includes('Admin') && !t.includes('membro') && !rawPhone.includes(t) && t.length > 1) {
-        return cleanName(t.startsWith('~') ? t.slice(1).trim() : t, digits);
-      }
-    }
-    return '';
+    return n;
   }
 
-  function cleanName(name, digits) {
-    if (!name) return '';
-    let n = name.trim();
-    if (n.startsWith('~')) n = n.slice(1).trim();
-    if (cleanPhoneNumber(n) === digits) return '';
-    return n;
+  function extractNameFromRow(row, rawPhone, digits) {
+    // 1. Procura em elementos cujo title comece com ~
+    for (const el of row.querySelectorAll('[title]')) {
+      const title = (el.getAttribute('title') || '').trim();
+      if (title.startsWith('~') && title.length > 1) {
+        const name = cleanName(title, digits);
+        if (name) return name;
+      }
+    }
+
+    // 2. Procura em spans com dir="auto" ou texto começando com ~
+    for (const el of row.querySelectorAll('span[dir="auto"], span, div')) {
+      const text = (el.textContent || '').trim();
+      if (text.startsWith('~') && text.length > 1) {
+        const name = cleanName(text, digits);
+        if (name) return name;
+      }
+    }
+
+    // 3. Procura no Fiber do elemento para pegar notifyName / pushname oficial
+    try {
+      const fiberKey = Object.keys(row).find(k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'));
+      if (fiberKey) {
+        let curr = row[fiberKey];
+        let depth = 0;
+        while (curr && depth < 25) {
+          const p = curr.memoizedProps;
+          if (p) {
+            const contact = p.contact || p.user || p.participant;
+            const possibleName = contact?.pushname || contact?.notifyName || contact?.name || contact?.formattedName || p.pushname || p.notifyName;
+            if (possibleName) {
+              const name = cleanName(possibleName, digits);
+              if (name) return name;
+            }
+          }
+          curr = curr.return;
+          depth++;
+        }
+      }
+    } catch {}
+
+    // 4. Qualquer span que não seja o telefone nem admin
+    for (const span of row.querySelectorAll('span[dir="auto"], span[title]')) {
+      const t = (span.getAttribute('title') || span.textContent || '').trim();
+      if (t && !t.includes('+') && !/admin/i.test(t) && !/membro/i.test(t) && (!rawPhone || !rawPhone.includes(t)) && t.length > 1) {
+        const name = cleanName(t, digits);
+        if (name) return name;
+      }
+    }
+
+    return '';
   }
 
   // TÉCNICA 1: Tentar extrair do React Fiber / Memória (Apenas números reais c.us)
@@ -399,7 +451,7 @@
             if (digits && digits.length >= 10 && digits.length <= 13) {
               const isAdmin = Boolean(item.isAdmin || item.isSuperAdmin || item.role === 'admin');
               const c = item.contact || {};
-              const name = cleanName(c.name || c.pushname || c.formattedName || item.displayName || item.name || '', digits);
+              const name = cleanName(c.notifyName || c.pushname || c.name || c.formattedName || item.notifyName || item.pushname || item.displayName || item.name || '', digits);
               if (!map.has(digits)) {
                 map.set(digits, { name, rawPhone: digits, digits, formatted: formatPhoneDisplay(digits), isAdmin });
               }
