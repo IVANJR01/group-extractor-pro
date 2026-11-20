@@ -244,11 +244,21 @@ export function WhatsAppMultiChipRobot({
       return;
     }
 
-    // Auto-exclusão de duplicados garantida
+    // Auto-exclusão de duplicados e filtragem de LIDs inválidos
     const cleanContactsMap = new Map();
+    let lidCount = 0;
+
     for (const c of contacts) {
-      const digits = (c.digits || c.phone || '').replace(/\D/g, '');
-      if (digits.length >= 8 && !cleanContactsMap.has(digits)) {
+      let digits = (c.digits || c.phone || '').replace(/\D/g, '');
+      const isLid = digits.length >= 14 && !digits.startsWith('55');
+      if (isLid) {
+        lidCount++;
+        continue;
+      }
+      if (digits.length >= 10 && digits.length <= 11 && !digits.startsWith('55')) {
+        digits = '55' + digits;
+      }
+      if (digits.length >= 10 && digits.length <= 13 && !cleanContactsMap.has(digits)) {
         cleanContactsMap.set(digits, {
           name: c.name || '',
           digits,
@@ -259,8 +269,16 @@ export function WhatsAppMultiChipRobot({
 
     const uniqueList = Array.from(cleanContactsMap.values());
     if (uniqueList.length === 0) {
-      toast('Nenhum contato válido encontrado para adicionar.', 'error');
+      if (lidCount > 0) {
+        toast(`Os contatos da lista são IDs de privacidade (LID) e não telefones reais. Importe uma lista com telefones reais ou extraia novamente abrindo os membros no WhatsApp Web.`, 'error');
+      } else {
+        toast('Nenhum contato com número de telefone válido encontrado para adicionar.', 'error');
+      }
       return;
+    }
+
+    if (lidCount > 0) {
+      toast(`ℹ️ ${lidCount} contatos com ID de privacidade foram ignorados para evitar erro 404.`, 'info');
     }
 
     setIsStartingTask(true);

@@ -325,11 +325,26 @@ class RobotManager {
       throw new Error('Nenhum WhatsApp conectado no robô! Conecte pelo menos 1 número.');
     }
 
-    // Filtra contatos com dígitos válidos e remove duplicados
+    // Filtra contatos com dígitos válidos, remove LIDs (IDs de privacidade do WhatsApp) e duplicações
     const uniqueMap = new Map();
+    let lidCount = 0;
+
     for (const c of contacts) {
-      const digits = (c.digits || c.phone || '').replace(/\D/g, '');
-      if (digits.length >= 8 && !uniqueMap.has(digits)) {
+      let digits = (c.digits || c.phone || '').replace(/\D/g, '');
+
+      // Detecção de LID (Linked Identity): IDs de 14-15 dígitos atribuídos pelo WhatsApp para mascarar telefones
+      const isLid = digits.length >= 14 && !digits.startsWith('55');
+      if (isLid) {
+        lidCount++;
+        continue;
+      }
+
+      // Auto-adiciona 55 se o número brasileiro estiver sem código do país (10-11 dígitos)
+      if (digits.length >= 10 && digits.length <= 11 && !digits.startsWith('55')) {
+        digits = '55' + digits;
+      }
+
+      if (digits.length >= 10 && digits.length <= 13 && !uniqueMap.has(digits)) {
         uniqueMap.set(digits, {
           name: c.name || '',
           digits,
@@ -338,8 +353,15 @@ class RobotManager {
       }
     }
 
+    if (lidCount > 0) {
+      this.addLog(`⚠️ ${lidCount} contatos com ID de privacidade (LID) foram ignorados por não serem números telefônicos reais.`, 'warning');
+    }
+
     const uniqueContacts = Array.from(uniqueMap.values());
     if (uniqueContacts.length === 0) {
+      if (lidCount > 0) {
+        throw new Error(`Todos os ${lidCount} contatos da lista possuem IDs de privacidade (LIDs) em vez de números de telefone reais. Extraia o grupo novamente abrindo a lista de membros no WhatsApp Web ou importe uma planilha com números reais.`);
+      }
       throw new Error('Nenhum contato com número de telefone válido para adicionar.');
     }
 
@@ -349,6 +371,26 @@ class RobotManager {
 
     this.addLog(`🔍 Verificando grupo de destino com ${mainChip.name}...`, 'info');
     const { groupJid, groupName } = await this.resolveGroup(mainSock, groupLinkOrJid);
+
+    // Verifica se o robô é administrador do grupo para evitar bloqueio de adição
+    try {
+      const meta = await mainSock.groupMetadata(groupJid);
+      const myJid = mainSock.user?.id || '';
+      const myPhone = myJid.split(':')[0].replace(/\D/g, '');
+      const isAdm = meta.participants?.some(
+        (p) => (p.id?.includes(myPhone) || p.jid?.includes(myPhone)) && (p.admin === 'admin' || p.admin === 'superadmin')
+      );
+      if (!isAdm) {
+        this.addLog(
+          `⚠️ ATENÇÃO: O WhatsApp ${mainChip.name} (${myPhone}) NÃO é Admin de "${groupName}". Para adicionar contatos com sucesso, promova este número a Administrador do grupo!`,
+          'warning'
+        );
+      } else {
+        this.addLog(`👑 Confirmado: WhatsApp ${mainChip.name} é Administrador de "${groupName}".`, 'success');
+      }
+    } catch (checkAdmErr) {
+      // Ignora erro de leitura de metadados se ocorrer
+    }
 
     this.activeTask = {
       isRunning: true,

@@ -279,12 +279,24 @@
         const map = new Map();
         for (const item of memoryResult.list) {
           let rawPhone = '';
-          if (item.id) rawPhone = typeof item.id === 'object' ? (item.id.user || item.id._serialized || '') : item.id;
-          if (!rawPhone && item.user) rawPhone = item.user;
-          if (!rawPhone && item.phoneNumber) rawPhone = item.phoneNumber;
+
+          // Prioriza campos de número real (Phone Number) e descarta LIDs
+          if (item.phoneNumber) {
+            rawPhone = item.phoneNumber;
+          } else if (item.pnJid) {
+            rawPhone = typeof item.pnJid === 'object' ? (item.pnJid.user || '') : item.pnJid;
+          } else if (item.contact?.phoneNumber) {
+            rawPhone = item.contact.phoneNumber;
+          } else if (item.contact?.id && (item.contact.id.server === 'c.us' || !String(item.contact.id.server || '').includes('lid'))) {
+            rawPhone = typeof item.contact.id === 'object' ? item.contact.id.user : item.contact.id;
+          } else if (item.id && (item.id.server === 'c.us' || (!String(item.id.server || '').includes('lid') && !String(item.id._serialized || '').includes('@lid')))) {
+            rawPhone = typeof item.id === 'object' ? item.id.user : item.id;
+          }
 
           const digits = cleanPhoneNumber(rawPhone);
-          if (digits.length >= 8 && digits.length <= 15) {
+          // Números de telefone reais têm entre 10 e 13 dígitos. LIDs de 14-15 dígitos são descartados
+          const isLid = digits.length >= 14 && !digits.startsWith('55');
+          if (digits.length >= 10 && digits.length <= 13 && !isLid) {
             const isAdmin = Boolean(item.isAdmin || item.isSuperAdmin || item.role === 'admin');
             const c = item.contact || {};
             const name = cleanName(c.name || c.pushname || c.formattedName || item.displayName || item.name || '', digits);
