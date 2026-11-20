@@ -345,23 +345,36 @@ class RobotManager {
     for (const c of contacts) {
       let digits = (c.digits || c.phone || '').replace(/\D/g, '');
 
-      // Detecção de LID (Linked Identity): IDs de 14-15 dígitos atribuídos pelo WhatsApp para mascarar telefones
-      const isLid = digits.length >= 14 && !digits.startsWith('55');
-      if (isLid) {
+      // Validação estrita de número de telefone real:
+      // Caso 1: Já tem código do Brasil 55 e tem 12 ou 13 dígitos (ex: 554398370727 ou 5511999998888)
+      if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
+        const ddd = parseInt(digits.slice(2, 4), 10);
+        if (ddd < 11 || ddd > 99) {
+          lidCount++;
+          continue;
+        }
+      }
+      // Caso 2: Número nacional com DDD sem o 55 (10 ou 11 dígitos, ex: 4398370727 ou 11999998888)
+      else if (digits.length === 10 || digits.length === 11) {
+        const ddd = parseInt(digits.slice(0, 2), 10);
+        if (ddd >= 11 && ddd <= 99) {
+          digits = '55' + digits;
+        } else {
+          lidCount++;
+          continue;
+        }
+      }
+      // Qualquer outro caso (12 a 16 dígitos sem 55, como LIDs do WhatsApp) é descartado
+      else {
         lidCount++;
         continue;
       }
 
-      // Auto-adiciona 55 se o número brasileiro estiver sem código do país (10-11 dígitos)
-      if (digits.length >= 10 && digits.length <= 11 && !digits.startsWith('55')) {
-        digits = '55' + digits;
-      }
-
-      if (digits.length >= 10 && digits.length <= 13 && !uniqueMap.has(digits)) {
+      if (!uniqueMap.has(digits)) {
         uniqueMap.set(digits, {
-          name: c.name || '',
+          name: c.name && !/^(não|nao|sim|admin|membro)$/i.test(c.name.trim()) ? c.name : '',
           digits,
-          phone: c.phone || digits,
+          phone: digits,
         });
       }
     }

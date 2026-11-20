@@ -244,25 +244,42 @@ export function WhatsAppMultiChipRobot({
       return;
     }
 
-    // Auto-exclusão de duplicados e filtragem de LIDs inválidos
+    // Auto-exclusão de duplicados e validação estrita de telefones reais (descarta LIDs do WhatsApp)
     const cleanContactsMap = new Map();
     let lidCount = 0;
 
     for (const c of contacts) {
       let digits = (c.digits || c.phone || '').replace(/\D/g, '');
-      const isLid = digits.length >= 14 && !digits.startsWith('55');
-      if (isLid) {
+
+      // Caso 1: Com DDI 55 (12 ou 13 dígitos)
+      if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
+        const ddd = parseInt(digits.slice(2, 4), 10);
+        if (ddd < 11 || ddd > 99) {
+          lidCount++;
+          continue;
+        }
+      }
+      // Caso 2: Sem DDI 55 (10 ou 11 dígitos com DDD válido)
+      else if (digits.length === 10 || digits.length === 11) {
+        const ddd = parseInt(digits.slice(0, 2), 10);
+        if (ddd >= 11 && ddd <= 99) {
+          digits = '55' + digits;
+        } else {
+          lidCount++;
+          continue;
+        }
+      }
+      // Qualquer outro caso (12-16 dígitos sem 55, como LIDs criptográficos) é descartado
+      else {
         lidCount++;
         continue;
       }
-      if (digits.length >= 10 && digits.length <= 11 && !digits.startsWith('55')) {
-        digits = '55' + digits;
-      }
-      if (digits.length >= 10 && digits.length <= 13 && !cleanContactsMap.has(digits)) {
+
+      if (!cleanContactsMap.has(digits)) {
         cleanContactsMap.set(digits, {
-          name: c.name || '',
+          name: c.name && !/^(não|nao|sim|admin|membro)$/i.test(c.name.trim()) ? c.name : '',
           digits,
-          phone: c.phone || digits,
+          phone: digits,
         });
       }
     }
