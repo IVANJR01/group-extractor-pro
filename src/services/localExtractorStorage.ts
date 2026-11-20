@@ -233,9 +233,11 @@ export function generateGoogleContactsCSV(contacts: SavedContact[], label: strin
     const norm = normalizeBrazilianPhoneDigits(c.digits || c.phone);
     const cleanDigits = norm.valid ? norm.digits : c.digits.replace(/\D/g, '');
     const ddd = cleanDigits.startsWith('55') ? cleanDigits.slice(2, 4) : cleanDigits.slice(0, 2);
-    const name = c.name?.trim() ? c.name.trim() : `Lead #${String(i + 1).padStart(3, '0')} (${ddd})`;
+    const givenName = c.name?.trim() ? c.name.trim() : `Lead #${String(i + 1).padStart(3, '0')}`;
+    const familyName = `(${ddd})`;
+    const fullName = `${givenName} ${familyName}`;
     const phone = `+${cleanDigits}`;
-    rows.push([name, name, `(${ddd})`, `* myContacts ::: ${label}`, 'Mobile', phone]);
+    rows.push([fullName, givenName, familyName, `* myContacts ::: ${label}`, 'Mobile', phone]);
   });
 
   return '\uFEFF' + rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
