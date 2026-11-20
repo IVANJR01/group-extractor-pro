@@ -657,14 +657,19 @@
             🚀 Ir Direto para o Sistema (localhost:5173)
           </button>
           <div class="gep-footer-right">
+            <div style="display: flex; align-items: center; gap: 4px; background: #0f172a; padding: 4px 8px; border-radius: 8px; border: 1px solid #334155;">
+              <span style="font-size: 11px; color: #94a3b8; font-weight: bold;">DDI:</span>
+              <button id="gep-toggle-ddi-with" type="button" style="padding: 2px 8px; border-radius: 4px; border: none; font-size: 11px; font-weight: bold; cursor: pointer; background: #10b981; color: white;">+55</button>
+              <button id="gep-toggle-ddi-without" type="button" style="padding: 2px 8px; border-radius: 4px; border: none; font-size: 11px; font-weight: bold; cursor: pointer; background: transparent; color: #94a3b8;">Sem 55</button>
+            </div>
             <button class="gep-btn gep-btn-secondary" id="gep-copy-btn">
-              📋 Copiar Telefones
+              📋 Copiar
             </button>
             <button class="gep-btn gep-btn-secondary" id="gep-csv-btn">
-              📥 Baixar CSV
+              📥 Baixar CSV (<span id="gep-csv-ddi-label">+55</span>)
             </button>
             <button class="gep-btn gep-btn-accent" id="gep-excel-btn">
-              📊 Excel (.xlsx)
+              📊 Excel (<span id="gep-excel-ddi-label">+55</span>)
             </button>
           </div>
         </div>
@@ -756,12 +761,40 @@
         });
       });
 
+      let exportWith55 = true;
+      const toggleWith = document.getElementById('gep-toggle-ddi-with');
+      const toggleWithout = document.getElementById('gep-toggle-ddi-without');
+      const csvLabel = document.getElementById('gep-csv-ddi-label');
+      const excelLabel = document.getElementById('gep-excel-ddi-label');
+
+      if (toggleWith && toggleWithout) {
+        toggleWith.addEventListener('click', () => {
+          exportWith55 = true;
+          toggleWith.style.background = '#10b981';
+          toggleWith.style.color = '#ffffff';
+          toggleWithout.style.background = 'transparent';
+          toggleWithout.style.color = '#94a3b8';
+          if (csvLabel) csvLabel.textContent = '+55';
+          if (excelLabel) excelLabel.textContent = '+55';
+        });
+
+        toggleWithout.addEventListener('click', () => {
+          exportWith55 = false;
+          toggleWithout.style.background = '#2563eb';
+          toggleWithout.style.color = '#ffffff';
+          toggleWith.style.background = 'transparent';
+          toggleWith.style.color = '#94a3b8';
+          if (csvLabel) csvLabel.textContent = 'Sem 55';
+          if (excelLabel) excelLabel.textContent = 'Sem 55';
+        });
+      }
+
       // Baixar CSV / Excel
       document.getElementById('gep-csv-btn').addEventListener('click', () => {
-        downloadCSV(groupName, currentContacts);
+        downloadCSV(groupName, currentContacts, exportWith55);
       });
       document.getElementById('gep-excel-btn').addEventListener('click', () => {
-        downloadCSV(groupName, currentContacts);
+        downloadCSV(groupName, currentContacts, exportWith55);
       });
 
       bindRowEvents();
@@ -851,7 +884,7 @@
     }).join('') + (list.length > 150 ? `<tr><td colspan="6" style="text-align:center;color:#64748b;padding:10px;font-style:italic;">... e mais ${list.length - 150} contatos (todos inclusos no envio/download).</td></tr>` : '');
   }
 
-  function downloadCSV(groupName, contacts) {
+  function downloadCSV(groupName, contacts, includePlus55 = true) {
     // Formato padrão oficial do Google Contatos (reconhece Celular / Mobile automaticamente)
     const headers = ['Name', 'Given Name', 'Family Name', 'Group Membership', 'Phone 1 - Type', 'Phone 1 - Value', 'Notes'];
     const rows = [headers];
@@ -870,9 +903,14 @@
       const familyName = `(${ddd})`;
       const fullName = `${givenName} ${familyName}`;
 
-      // Formato nacional limpo para o Google Contatos: (DD) 9XXXX-XXXX
-      // O Google Contatos associa a bandeira 🇧🇷 sem duplicar o texto "+55" dentro do campo
-      const phone = sub.length === 9 ? `(${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : (cleanDigits ? `+${cleanDigits}` : '');
+      // Formato com +55 (+55 11 99999-9999) ou sem +55 ((11) 99999-9999)
+      let phone = '';
+      if (includePlus55) {
+        phone = sub.length === 9 ? `+55 (${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : (cleanDigits.startsWith('55') ? `+${cleanDigits}` : `+55${cleanDigits}`);
+      } else {
+        phone = sub.length === 9 ? `(${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : (cleanDigits.startsWith('55') ? cleanDigits.slice(2) : cleanDigits);
+      }
+
       const notes = `Grupo: ${groupName} | Admin: ${c.isAdmin ? 'Sim' : 'Não'}`;
       rows.push([fullName, givenName, familyName, `* myContacts ::: ${groupName}`, 'Mobile', phone, notes]);
     }
@@ -882,7 +920,8 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `whatsapp_${slugify(groupName)}_google.csv`;
+    const tag = includePlus55 ? 'com_55' : 'sem_55';
+    a.download = `whatsapp_${slugify(groupName)}_${tag}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

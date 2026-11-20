@@ -190,7 +190,7 @@ export function removeDuplicateContacts(): { removedCount: number; session: Extr
  * Cada contato importado na agenda aparece instantaneamente na lista
  * "Adicionar Participantes" do WhatsApp do administrador.
  */
-export function generateVCardString(contacts: { name?: string; digits: string }[], groupName: string = ''): string {
+export function generateVCardString(contacts: { name?: string; digits: string }[], groupName: string = '', includePlus55: boolean = true): string {
   return contacts
     .map((c, i) => {
       const norm = normalizeBrazilianPhoneDigits(c.digits);
@@ -207,25 +207,30 @@ export function generateVCardString(contacts: { name?: string; digits: string }[
         ? `Lead #${String(i + 1).padStart(3, '0')} (${ddd})`
         : `${rawName} (${ddd})`;
 
+      const telNumber = includePlus55
+        ? (cleanDigits.startsWith('55') ? `+${cleanDigits}` : `+55${cleanDigits}`)
+        : (cleanDigits.startsWith('55') ? cleanDigits.slice(2) : cleanDigits);
+
       return [
         'BEGIN:VCARD',
         'VERSION:3.0',
         `FN:${uniqueName}`,
         `N:${uniqueName};;;;`,
-        `TEL;TYPE=CELL,VOICE:+${cleanDigits}`,
+        `TEL;TYPE=CELL,VOICE:${telNumber}`,
         'END:VCARD',
       ].join('\r\n');
     })
     .join('\r\n');
 }
 
-export function downloadVCardFile(fileName: string, contacts: { name?: string; digits: string }[]): void {
-  const content = generateVCardString(contacts, fileName);
+export function downloadVCardFile(fileName: string, contacts: { name?: string; digits: string }[], includePlus55: boolean = true): void {
+  const content = generateVCardString(contacts, fileName, includePlus55);
   const blob = new Blob([content], { type: 'text/vcard;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${fileName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}.vcf`;
+  const tag = includePlus55 ? 'com_55' : 'sem_55';
+  a.download = `${fileName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${tag}.vcf`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -235,8 +240,9 @@ export function downloadVCardFile(fileName: string, contacts: { name?: string; d
 /**
  * GERA CSV OFICIAL DO GOOGLE CONTATOS
  * Formato padrão oficial internacional para importação imediata em contacts.google.com.
+ * Suporta modo COM +55 (+55 11 99999-9999) e SEM +55 ((11) 99999-9999).
  */
-export function generateGoogleContactsCSV(contacts: SavedContact[], label: string = '3MPRO'): string {
+export function generateGoogleContactsCSV(contacts: SavedContact[], label: string = '3MPRO', includePlus55: boolean = true): string {
   const headers = ['Name', 'Given Name', 'Family Name', 'Group Membership', 'Phone 1 - Type', 'Phone 1 - Value'];
   const rows: string[][] = [headers];
 
@@ -252,22 +258,29 @@ export function generateGoogleContactsCSV(contacts: SavedContact[], label: strin
     const givenName = isGeneric ? `Lead #${String(i + 1).padStart(3, '0')}` : rawName;
     const familyName = `(${ddd})`;
     const fullName = `${givenName} ${familyName}`;
-    // Formato nacional limpo para o Google Contatos: (DD) 9XXXX-XXXX
-    // O Google Contatos associa a bandeira 🇧🇷 sem duplicar o texto "+55" dentro do campo
-    const phone = sub.length === 9 ? `(${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : `+${cleanDigits}`;
+
+    // Suporta com +55 e sem +55
+    let phone = '';
+    if (includePlus55) {
+      phone = sub.length === 9 ? `+55 (${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : (cleanDigits.startsWith('55') ? `+${cleanDigits}` : `+55${cleanDigits}`);
+    } else {
+      phone = sub.length === 9 ? `(${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : (cleanDigits.startsWith('55') ? cleanDigits.slice(2) : cleanDigits);
+    }
+
     rows.push([fullName, givenName, familyName, `* myContacts ::: ${label}`, 'Mobile', phone]);
   });
 
   return '\uFEFF' + rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
 }
 
-export function downloadGoogleContactsCSV(fileName: string, contacts: SavedContact[], label: string = '3MPRO'): void {
-  const content = generateGoogleContactsCSV(contacts, label);
+export function downloadGoogleContactsCSV(fileName: string, contacts: SavedContact[], label: string = '3MPRO', includePlus55: boolean = true): void {
+  const content = generateGoogleContactsCSV(contacts, label, includePlus55);
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${fileName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_google_contatos.csv`;
+  const tag = includePlus55 ? 'com_55' : 'sem_55';
+  a.download = `${fileName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_google_${tag}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

@@ -155,7 +155,7 @@ export function DashboardPage() {
             }
           }
         }
-      } catch {}
+      } catch { }
     }
 
     checkIncoming();
@@ -283,7 +283,7 @@ export function DashboardPage() {
       setSession(newSession);
       setSelectedDigits(new Set());
       lastReceivedAtRef.current = Date.now();
-      fetch('/api/extracted-contacts', { method: 'DELETE' }).catch(() => {});
+      fetch('/api/extracted-contacts', { method: 'DELETE' }).catch(() => { });
       toast(`✅ ${deduped.length} contatos importados do arquivo com sucesso!`, 'info');
     } catch (err: unknown) {
       console.error(err);
@@ -362,7 +362,7 @@ export function DashboardPage() {
     setSession(newSession);
     setPasteInput('');
     lastReceivedAtRef.current = Date.now();
-    fetch('/api/extracted-contacts', { method: 'DELETE' }).catch(() => {});
+    fetch('/api/extracted-contacts', { method: 'DELETE' }).catch(() => { });
     toast(`✅ ${parsed.length} contatos carregados da lista colada!`, 'info');
   };
 
@@ -399,42 +399,89 @@ export function DashboardPage() {
     });
   };
 
-  const downloadCSV = () => {
+  const [exportFormat, setExportFormat] = useState<'with_55' | 'without_55'>('with_55');
+
+  const downloadCSV = (forceInclude55?: boolean) => {
     if (!session || session.contacts.length === 0) return;
+    const include55 = forceInclude55 !== undefined ? forceInclude55 : (exportFormat === 'with_55');
     const rows = [['Nome', 'Telefone', 'Digitos', 'Administrador', 'Origem', 'Grupo_Destino']];
-    for (const c of session.contacts) {
+    
+    for (let i = 0; i < session.contacts.length; i++) {
+      const c = session.contacts[i];
+      const norm = normalizeBrazilianPhoneDigits(c.digits || c.phone);
+      const cleanDigits = norm.valid ? norm.digits : c.digits.replace(/\D/g, '');
+      const ddd = cleanDigits.startsWith('55') ? cleanDigits.slice(2, 4) : cleanDigits.slice(0, 2);
+      const sub = cleanDigits.startsWith('55') ? cleanDigits.slice(4) : cleanDigits.slice(2);
+
+      let rawName = (c.name || '').trim().replace(/\s*\(\d{2}\)\s*$/g, '').trim();
+      const isGroupName = session.groupName && rawName.toLowerCase() === session.groupName.toLowerCase();
+      const isGeneric = !rawName || isGroupName || /^(rei da promo|grupo|contatos|whatsapp|membro|lead|sem nome)/i.test(rawName);
+      const contactName = isGeneric ? `Lead #${String(i + 1).padStart(3, '0')} (${ddd})` : `${rawName} (${ddd})`;
+
+      const phone = include55
+        ? (sub.length === 9 ? `+55 (${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : `+${cleanDigits}`)
+        : (sub.length === 9 ? `(${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : (cleanDigits.startsWith('55') ? cleanDigits.slice(2) : cleanDigits));
+
+      const digits = include55
+        ? (cleanDigits.startsWith('55') ? cleanDigits : `55${cleanDigits}`)
+        : (cleanDigits.startsWith('55') ? cleanDigits.slice(2) : cleanDigits);
+
       rows.push([
-        c.name || '',
-        c.phone,
-        c.digits,
+        contactName,
+        phone,
+        digits,
         c.isAdmin ? 'Sim' : 'Não',
         session.groupName,
         destinationName || destinationUrl || '',
       ]);
     }
+
     const csvContent = '\uFEFF' + rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `contatos_${(session.groupName || 'whatsapp').toLowerCase().replace(/[^a-z0-9]+/g, '_')}.csv`;
+    const tag = include55 ? 'com_55' : 'sem_55';
+    a.download = `contatos_${(session.groupName || 'whatsapp').toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${tag}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast('Planilha CSV baixada!', 'info');
+    toast(`Planilha CSV baixada (${include55 ? 'COM +55' : 'SEM +55'})!`, 'info');
   };
 
-  const downloadExcel = async () => {
+  const downloadExcel = async (forceInclude55?: boolean) => {
     if (!session || session.contacts.length === 0) return;
+    const include55 = forceInclude55 !== undefined ? forceInclude55 : (exportFormat === 'with_55');
     const XLSX = await import('@e965/xlsx');
     const headers = ['Nome', 'Telefone', 'Digitos', 'Administrador', 'Origem', 'Grupo_Destino'];
-    const rows = session.contacts.map((c) => [
-      c.name || '',
-      c.phone,
-      c.digits,
-      c.isAdmin ? 'Sim' : 'Não',
-      session.groupName,
-      destinationName || destinationUrl || '',
-    ]);
+    const rows = session.contacts.map((c, i) => {
+      const norm = normalizeBrazilianPhoneDigits(c.digits || c.phone);
+      const cleanDigits = norm.valid ? norm.digits : c.digits.replace(/\D/g, '');
+      const ddd = cleanDigits.startsWith('55') ? cleanDigits.slice(2, 4) : cleanDigits.slice(0, 2);
+      const sub = cleanDigits.startsWith('55') ? cleanDigits.slice(4) : cleanDigits.slice(2);
+
+      let rawName = (c.name || '').trim().replace(/\s*\(\d{2}\)\s*$/g, '').trim();
+      const isGroupName = session.groupName && rawName.toLowerCase() === session.groupName.toLowerCase();
+      const isGeneric = !rawName || isGroupName || /^(rei da promo|grupo|contatos|whatsapp|membro|lead|sem nome)/i.test(rawName);
+      const contactName = isGeneric ? `Lead #${String(i + 1).padStart(3, '0')} (${ddd})` : `${rawName} (${ddd})`;
+
+      const phone = include55
+        ? (sub.length === 9 ? `+55 (${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : `+${cleanDigits}`)
+        : (sub.length === 9 ? `(${ddd}) ${sub.slice(0, 5)}-${sub.slice(5)}` : (cleanDigits.startsWith('55') ? cleanDigits.slice(2) : cleanDigits));
+
+      const digits = include55
+        ? (cleanDigits.startsWith('55') ? cleanDigits : `55${cleanDigits}`)
+        : (cleanDigits.startsWith('55') ? cleanDigits.slice(2) : cleanDigits);
+
+      return [
+        contactName,
+        phone,
+        digits,
+        c.isAdmin ? 'Sim' : 'Não',
+        session.groupName,
+        destinationName || destinationUrl || '',
+      ];
+    });
+
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Contatos');
@@ -443,10 +490,11 @@ export function DashboardPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `contatos_${(session.groupName || 'whatsapp').toLowerCase().replace(/[^a-z0-9]+/g, '_')}.xlsx`;
+    const tag = include55 ? 'com_55' : 'sem_55';
+    a.download = `contatos_${(session.groupName || 'whatsapp').toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${tag}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-    toast('Planilha Excel (.xlsx) baixada!', 'info');
+    toast(`Planilha Excel baixada (${include55 ? 'COM +55' : 'SEM +55'})!`, 'info');
   };
 
   // SINCRONIZAR COM GOOGLE CONTATOS (3msolucoes01@gmail.com)
@@ -455,31 +503,34 @@ export function DashboardPage() {
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const [lastDownloadedFile, setLastDownloadedFile] = useState('');
 
-  const handleSyncGoogleContacts = () => {
+  const handleSyncGoogleContacts = (forceInclude55?: boolean) => {
     if (!session || session.contacts.length === 0) {
       toast('Carregue ou extraia contatos antes de sincronizar.', 'error');
       return;
     }
+    const include55 = forceInclude55 !== undefined ? forceInclude55 : (exportFormat === 'with_55');
     const cleanGroupName = (session.groupName || '3mpro').toLowerCase().replace(/[^a-z0-9]+/g, '_');
-    const fileName = `contatos_${cleanGroupName}_google.csv`;
+    const tag = include55 ? 'com_55' : 'sem_55';
+    const fileName = `contatos_${cleanGroupName}_google_${tag}.csv`;
     setLastDownloadedFile(fileName);
 
     // 1. Gera e baixa o arquivo CSV formatado especialmente para o Google Contacts
-    downloadGoogleContactsCSV(session.groupName || '3mpro', session.contacts, '3MPRO');
-    // 2. Abre a página oficial do Google Contacts na conta informada (sem 404)
+    downloadGoogleContactsCSV(session.groupName || '3mpro', session.contacts, '3MPRO', include55);
+    // 2. Abre a página oficial do Google Contacts na conta informada
     openGoogleContactsImport(googleEmail);
     // 3. Abre o modal explicativo com o passo a passo
     setSyncModalOpen(true);
-    toast(`📥 Arquivo baixado! No Google Contatos, clique em "Importar contatos" e selecione o arquivo.`, 'info');
+    toast(`📥 Arquivo (${include55 ? 'COM +55' : 'SEM +55'}) baixado! No Google Contatos, clique em "Importar contatos" e selecione o arquivo.`, 'info');
   };
 
-  const handleDownloadVCFDirect = () => {
+  const handleDownloadVCFDirect = (forceInclude55?: boolean) => {
     if (!session || session.contacts.length === 0) {
       toast('Carregue ou extraia contatos antes de baixar o arquivo VCF.', 'error');
       return;
     }
-    downloadVCardFile(session.groupName || 'contatos_agenda_3mpro', session.contacts);
-    toast('📱 Arquivo .VCF baixado! Envie para o WhatsApp do seu celular ou toque nele para salvar na agenda.', 'info');
+    const include55 = forceInclude55 !== undefined ? forceInclude55 : (exportFormat === 'with_55');
+    downloadVCardFile(session.groupName || 'contatos_agenda_3mpro', session.contacts, include55);
+    toast(`📱 Arquivo .VCF (${include55 ? 'COM +55' : 'SEM +55'}) baixado! Arraste para o celular/emulador para importar.`, 'info');
   };
 
   const handleSendSingleInvite = (c: { digits: string; name: string }) => {
@@ -854,23 +905,51 @@ export function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+              <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-lg text-xs font-medium border border-blue-500/30 shadow-inner">
+                <span className="text-[11px] text-slate-400 px-1 font-bold">DDI:</span>
+                <button
+                  type="button"
+                  onClick={() => setExportFormat('with_55')}
+                  className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                    exportFormat === 'with_55'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Formato Internacional completo com +55"
+                >
+                  🇧🇷 COM +55
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExportFormat('without_55')}
+                  className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                    exportFormat === 'without_55'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Formato Nacional sem +55 (DDD + 9 dígitos)"
+                >
+                  🇧🇷 SEM +55
+                </button>
+              </div>
+
               <Button
                 size="sm"
-                onClick={handleSyncGoogleContacts}
+                onClick={() => handleSyncGoogleContacts()}
                 disabled={allContacts.length === 0}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-bold gap-2 shadow-lg cursor-pointer h-9 px-4"
               >
-                <span>📥</span> Sincronizar com {googleEmail.split('@')[0]}
+                <span>📥</span> Sincronizar Google ({exportFormat === 'with_55' ? '+55' : 'Sem 55'})
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={handleDownloadVCFDirect}
+                onClick={() => handleDownloadVCFDirect()}
                 disabled={allContacts.length === 0}
                 className="border-slate-700 hover:bg-slate-800 text-slate-200 gap-1.5 font-bold cursor-pointer h-9 px-3"
-                title="Baixar arquivo VCF para abrir direto no celular"
+                title={`Baixar arquivo VCF ${exportFormat === 'with_55' ? 'COM +55' : 'SEM +55'} para celular/emulador`}
               >
-                <span>📱</span> Baixar .VCF
+                <span>📱</span> Baixar .VCF ({exportFormat === 'with_55' ? '+55' : 'Sem 55'})
               </Button>
             </div>
           </div>
@@ -1189,33 +1268,30 @@ export function DashboardPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setExecutionMode('robot_auto')}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all ${
-                  executionMode === 'robot_auto'
-                    ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-500'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all ${executionMode === 'robot_auto'
+                  ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-500'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                  }`}
               >
                 <Bot className="h-4 w-4" />
                 Robô Multi-Chip Automático (Revezando 20/dia)
               </button>
               <button
                 onClick={() => setExecutionMode('multi_admin')}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all ${
-                  executionMode === 'multi_admin'
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all ${executionMode === 'multi_admin'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                  }`}
               >
                 <ShieldCheck className="h-4 w-4" />
                 Cronograma Manual & VCard (.vcf)
               </button>
               <button
                 onClick={() => setExecutionMode('direct_invite')}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all ${
-                  executionMode === 'direct_invite'
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all ${executionMode === 'direct_invite'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                  }`}
               >
                 <Send className="h-4 w-4" />
                 Lista Geral & Convite Individual (wa.me)
@@ -1413,11 +1489,10 @@ export function DashboardPage() {
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-2">
                     <button
                       onClick={() => setActiveDayFilter('all')}
-                      className={`px-3 py-1.5 text-xs font-bold rounded-lg shrink-0 transition-all ${
-                        activeDayFilter === 'all'
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg shrink-0 transition-all ${activeDayFilter === 'all'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
                     >
                       Todos os Dias ({totalBatches} Lotes)
                     </button>
@@ -1428,13 +1503,12 @@ export function DashboardPage() {
                         <button
                           key={d}
                           onClick={() => setActiveDayFilter(d)}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-lg shrink-0 flex items-center gap-1.5 transition-all ${
-                            activeDayFilter === d
-                              ? 'bg-primary text-primary-foreground shadow-sm'
-                              : dayDone
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg shrink-0 flex items-center gap-1.5 transition-all ${activeDayFilter === d
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : dayDone
                               ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-500/30'
                               : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                          }`}
+                            }`}
                         >
                           Dia {d} {dayDone && '✓'}
                         </button>
@@ -1447,11 +1521,10 @@ export function DashboardPage() {
                     {visibleBatches.map((b) => (
                       <Card
                         key={b.id}
-                        className={`transition-all border ${
-                          b.completed
-                            ? 'bg-emerald-500/5 border-emerald-500/40 opacity-80'
-                            : 'bg-card border-border hover:border-primary/50'
-                        }`}
+                        className={`transition-all border ${b.completed
+                          ? 'bg-emerald-500/5 border-emerald-500/40 opacity-80'
+                          : 'bg-card border-border hover:border-primary/50'
+                          }`}
                       >
                         <CardHeader className="p-4 pb-2">
                           <div className="flex items-center justify-between">
@@ -1569,11 +1642,38 @@ export function DashboardPage() {
                       {copiedPhones ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                       {copiedPhones ? 'Copiados!' : 'Copiar Telefones'}
                     </Button>
-                    <Button variant="outline" size="sm" onClick={downloadCSV} className="gap-1.5">
-                      <Download className="h-3.5 w-3.5" /> CSV
+                    <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg text-xs font-medium border border-border">
+                      <span className="text-[11px] text-muted-foreground px-1 font-semibold">DDI:</span>
+                      <button
+                        type="button"
+                        onClick={() => setExportFormat('with_55')}
+                        className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                          exportFormat === 'with_55'
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        title="Exportar no formato internacional (+55 11 99999-9999)"
+                      >
+                        +55
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExportFormat('without_55')}
+                        className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                          exportFormat === 'without_55'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        title="Exportar no formato nacional sem +55 ((11) 99999-9999)"
+                      >
+                        Sem 55
+                      </button>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => downloadCSV()} className="gap-1.5 font-medium" title={`Baixar planilha CSV ${exportFormat === 'with_55' ? 'COM +55' : 'SEM +55'}`}>
+                      <Download className="h-3.5 w-3.5" /> CSV ({exportFormat === 'with_55' ? '+55' : 'Sem 55'})
                     </Button>
-                    <Button variant="outline" size="sm" onClick={downloadExcel} className="gap-1.5">
-                      <FileSpreadsheet className="h-3.5 w-3.5" /> Excel (.xlsx)
+                    <Button variant="outline" size="sm" onClick={() => downloadExcel()} className="gap-1.5 font-medium" title={`Baixar planilha Excel ${exportFormat === 'with_55' ? 'COM +55' : 'SEM +55'}`}>
+                      <FileSpreadsheet className="h-3.5 w-3.5" /> Excel ({exportFormat === 'with_55' ? '+55' : 'Sem 55'})
                     </Button>
                     <Button variant="ghost" size="sm" onClick={handleClearAll} className="gap-1 text-muted-foreground hover:text-destructive">
                       <Trash2 className="h-3.5 w-3.5" /> Limpar Lista
@@ -1587,31 +1687,28 @@ export function DashboardPage() {
                   <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                     <button
                       onClick={() => setRoleFilter('all')}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                        roleFilter === 'all'
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${roleFilter === 'all'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
                     >
                       Todos ({allContacts.length})
                     </button>
                     <button
                       onClick={() => setRoleFilter('members')}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                        roleFilter === 'members'
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${roleFilter === 'members'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
                     >
                       Membros Comuns ({memberTotal})
                     </button>
                     <button
                       onClick={() => setRoleFilter('admins')}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                        roleFilter === 'admins'
-                          ? 'bg-amber-600 text-white shadow-sm'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${roleFilter === 'admins'
+                        ? 'bg-amber-600 text-white shadow-sm'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
                     >
                       Admins ({adminTotal})
                     </button>
