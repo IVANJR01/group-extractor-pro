@@ -546,7 +546,15 @@ class RobotManager {
         }
       } catch (err) {
         this.activeTask.failedCount++;
-        this.addLog(`❌ [${selectedChip.name}] Erro ao adicionar ${displayName}: ${err.message}`, 'error');
+        const msg = String(err.message || err);
+        if (msg.includes('bad-request')) {
+          this.addLog(
+            `❌ [${selectedChip.name}] Erro (bad-request) ao adicionar ${displayName}: O WhatsApp recusou a adição. Certifique-se de que o WhatsApp ${selectedChip.name} (${selectedChip.phone || 'ativo'}) é Administrador do grupo "${this.activeTask.groupName}" no seu celular!`,
+            'error'
+          );
+        } else {
+          this.addLog(`❌ [${selectedChip.name}] Erro ao adicionar ${displayName}: ${msg}`, 'error');
+        }
       }
 
       // Se ainda houver contatos e não estiver cancelado, aguarda delay anti-ban

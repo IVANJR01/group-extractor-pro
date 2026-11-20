@@ -14,6 +14,7 @@ import {
   Loader2,
   Plug,
   Info,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -79,14 +80,16 @@ export function WhatsAppMultiChipRobot({
   const [selectedChipIndex, setSelectedChipIndex] = useState<number>(0);
 
   // Estados de formulário de conexão
-  const [pairingPhone, setPairingPhone] = useState('');
+  const [pairingPhone, setPairingPhone] = useState('4376089192');
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
   const [isLoadingQr, setIsLoadingQr] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Parâmetros de execução anti-ban
+  // Parâmetros de execução anti-ban e modo de teste
   const [dailyLimit, setDailyLimit] = useState<number>(20);
   const [delaySeconds, setDelaySeconds] = useState<number>(20);
+  const [batchLimit, setBatchLimit] = useState<number>(1); // Inicia com 1 para permitir teste unitário
+  const [customTestPhone, setCustomTestPhone] = useState('');
   const [isStartingTask, setIsStartingTask] = useState(false);
 
   // Polling de status do robô a cada 2 segundos
@@ -231,8 +234,8 @@ export function WhatsAppMultiChipRobot({
     }
   };
 
-  // INICIAR TAREFA DE ADIÇÃO AUTOMÁTICA
-  const handleStartAdding = async () => {
+  // INICIAR TAREFA DE ADIÇÃO AUTOMÁTICA (COM SUPORTE A MODO TESTE DE 1 CONTATO)
+  const handleStartAdding = async (countLimit?: number, customNumber?: string) => {
     if (!destinationUrl) {
       toast('Informe o link do grupo de destino antes de iniciar.', 'error');
       return;
@@ -240,55 +243,85 @@ export function WhatsAppMultiChipRobot({
 
     const connectedChips = chips.filter((c) => c.status === 'connected');
     if (connectedChips.length === 0) {
-      toast('Conecte pelo menos 1 WhatsApp no robô para iniciar.', 'error');
+      toast('Conecte pelo menos 1 WhatsApp no robô acima para iniciar.', 'error');
       return;
     }
 
-    // Processamento de contatos (telefones e LIDs) sem bloquear o usuário
-    const cleanContactsMap = new Map();
-    let lidCount = 0;
-    let phoneCount = 0;
+    let listToProcess: any[] = [];
 
-    for (const c of contacts) {
-      let digits = (c.digits || c.phone || '').replace(/\D/g, '');
-      if (!digits || digits.length < 8) continue;
+    // Se o usuário digitou um número customizado para teste
+    if (customNumber && customNumber.trim()) {
+      let cleanDigits = customNumber.replace(/\D/g, '');
+      if (cleanDigits.length < 8) {
+        toast('Digite um número válido para o teste.', 'error');
+        return;
+      }
+      if (cleanDigits.length === 10 || cleanDigits.length === 11) {
+        cleanDigits = '55' + cleanDigits;
+      }
+      listToProcess = [{
+        name: 'Contato de Teste',
+        digits: cleanDigits,
+        phone: cleanDigits,
+        isLid: cleanDigits.length >= 14,
+      }];
+    } else {
+      // Processamento de contatos (telefones e LIDs) sem bloquear o usuário
+      const cleanContactsMap = new Map();
+      let lidCount = 0;
+      let phoneCount = 0;
 
-      let isLid = false;
-      if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
-        phoneCount++;
-      } else if (digits.length === 10 || digits.length === 11) {
-        digits = '55' + digits;
-        phoneCount++;
-      } else if (digits.length >= 14) {
-        isLid = true;
-        lidCount++;
-      } else {
-        phoneCount++;
+      for (const c of contacts) {
+        let digits = (c.digits || c.phone || '').replace(/\D/g, '');
+        if (!digits || digits.length < 8) continue;
+
+        let isLid = false;
+        if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
+          phoneCount++;
+        } else if (digits.length === 10 || digits.length === 11) {
+          digits = '55' + digits;
+          phoneCount++;
+        } else if (digits.length >= 14) {
+          isLid = true;
+          lidCount++;
+        } else {
+          phoneCount++;
+        }
+
+        const rawName = (c.name || '').trim();
+        const cleanName = !/^(não|nao|sim|admin|membro)$/i.test(rawName) ? rawName : '';
+
+        if (!cleanContactsMap.has(digits)) {
+          cleanContactsMap.set(digits, {
+            name: cleanName,
+            digits,
+            phone: digits,
+            isLid,
+          });
+        }
       }
 
-      const rawName = (c.name || '').trim();
-      const cleanName = !/^(não|nao|sim|admin|membro)$/i.test(rawName) ? rawName : '';
-
-      if (!cleanContactsMap.has(digits)) {
-        cleanContactsMap.set(digits, {
-          name: cleanName,
-          digits,
-          phone: digits,
-          isLid,
-        });
+      let uniqueList = Array.from(cleanContactsMap.values());
+      if (uniqueList.length === 0) {
+        toast('Nenhum contato encontrado na lista para adicionar.', 'error');
+        return;
       }
-    }
 
-    const uniqueList = Array.from(cleanContactsMap.values());
-    if (uniqueList.length === 0) {
-      toast('Nenhum contato encontrado na lista para adicionar.', 'error');
-      return;
-    }
+      // Aplica limite de lote se definido (ex: 1 contato para teste unitário)
+      const limit = typeof countLimit === 'number' ? countLimit : batchLimit;
+      if (limit > 0 && limit < uniqueList.length) {
+        uniqueList = uniqueList.slice(0, limit);
+      }
 
-    if (lidCount > 0 && phoneCount === 0) {
-      toast(`ℹ️ A lista possui ${lidCount} contatos com IDs de privacidade (LID). O robô tentará adicionar via @lid com fallback.`, 'info');
-    } else if (lidCount > 0) {
-      toast(`ℹ️ ${phoneCount} números e ${lidCount} IDs de privacidade (LID) prontos para o robô.`, 'info');
+      listToProcess = uniqueList;
+
+      if (limit === 1) {
+        toast(`🧪 Modo Teste: Processando apenas 1 contato da lista para validação.`, 'info');
+      } else if (lidCount > 0 && phoneCount === 0) {
+        toast(`ℹ️ A lista possui ${lidCount} contatos com IDs de privacidade (LID). O robô tentará adicionar via @lid com fallback.`, 'info');
+      } else if (lidCount > 0) {
+        toast(`ℹ️ ${phoneCount} números e ${lidCount} IDs de privacidade (LID) prontos para o robô.`, 'info');
+      }
     }
 
     setIsStartingTask(true);
@@ -298,7 +331,7 @@ export function WhatsAppMultiChipRobot({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           groupUrl: destinationUrl,
-          contacts: uniqueList,
+          contacts: listToProcess,
           delaySeconds,
           dailyLimit,
         }),
@@ -309,7 +342,7 @@ export function WhatsAppMultiChipRobot({
         throw new Error(data.error || 'Falha ao iniciar robô');
       }
 
-      toast(`🚀 Robô iniciado com sucesso! Adicionando contatos com revezamento seguro.`, 'info');
+      toast(`🚀 Robô iniciado com sucesso! Adicionando ${listToProcess.length} contato(s).`, 'info');
       fetchStatus();
     } catch (err: any) {
       toast(err.message || 'Erro ao iniciar robô de adição', 'error');
@@ -622,7 +655,7 @@ export function WhatsAppMultiChipRobot({
           )}
 
           {/* PARÂMETROS E BOTÃO DE EXECUÇÃO */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-4 bg-muted/40 rounded-xl border">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 p-4 bg-muted/40 rounded-xl border">
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1">
                 Grupo de Destino
@@ -649,40 +682,67 @@ export function WhatsAppMultiChipRobot({
 
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                Meta Anti-Ban por Número
+                Quantidade a Adicionar
               </label>
               <div className="flex items-center gap-2">
                 <select
-                  value={dailyLimit}
-                  onChange={(e) => setDailyLimit(Number(e.target.value))}
+                  value={batchLimit}
+                  onChange={(e) => setBatchLimit(Number(e.target.value))}
                   disabled={activeTask?.isRunning}
-                  className="px-2.5 py-1 text-xs font-bold rounded-lg border bg-background text-foreground"
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg border bg-background text-foreground w-full"
                 >
-                  <option value={10}>10 contatos / dia</option>
-                  <option value={15}>15 contatos / dia</option>
-                  <option value={20}>20 contatos / dia (Ideal)</option>
-                  <option value={25}>25 contatos / dia</option>
+                  <option value={1}>🧪 1 contato (Modo Teste)</option>
+                  <option value={5}>5 contatos</option>
+                  <option value={10}>10 contatos</option>
+                  <option value={20}>20 contatos</option>
+                  <option value={0}>Todos ({contacts.length - duplicateCount})</option>
                 </select>
               </div>
             </div>
 
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                Intervalo Anti-Ban (Delay)
+                Meta Anti-Ban / Dia
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={dailyLimit}
+                  onChange={(e) => setDailyLimit(Number(e.target.value))}
+                  disabled={activeTask?.isRunning}
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg border bg-background text-foreground w-full"
+                >
+                  <option value={10}>10 contatos / dia</option>
+                  <option value={15}>15 contatos / dia</option>
+                  <option value={20}>20 contatos / dia</option>
+                  <option value={50}>50 contatos / dia</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                Intervalo (Delay)
               </label>
               <div className="flex items-center gap-2">
                 <select
                   value={delaySeconds}
                   onChange={(e) => setDelaySeconds(Number(e.target.value))}
                   disabled={activeTask?.isRunning}
-                  className="px-2.5 py-1 text-xs font-bold rounded-lg border bg-background text-foreground"
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg border bg-background text-foreground w-full"
                 >
                   <option value={15}>15s (Rápido)</option>
                   <option value={20}>20s (Recomendado)</option>
                   <option value={30}>30s (Ultra-Seguro)</option>
                 </select>
-                <span className="text-[11px] text-muted-foreground">por contato</span>
               </div>
+            </div>
+          </div>
+
+          {/* AVISO DE ADMINISTRADOR DO GRUPO */}
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2.5">
+            <span className="text-base leading-none">👑</span>
+            <div>
+              <strong>Requisito Obrigatório:</strong> O seu número do WhatsApp deve ser <strong>Administrador do grupo de destino</strong> no celular. Sem permissão de Admin, o WhatsApp bloqueia a adição de pessoas e retorna erro de permissão (bad-request).
             </div>
           </div>
 
@@ -755,27 +815,66 @@ export function WhatsAppMultiChipRobot({
               </div>
             </div>
           ) : (
-            <div className="pt-2">
-              <Button
-                onClick={handleStartAdding}
-                disabled={isStartingTask || connectedCount === 0 || contacts.length === 0}
-                className="w-full py-6 text-base font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg gap-2"
-              >
-                {isStartingTask ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Iniciando Robô...
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-5 w-5 fill-white" />
-                    Iniciar Adição Automática dos Lotes ({connectedCount} WhatsApps Revezando)
-                  </>
-                )}
-              </Button>
+            <div className="pt-2 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* BOTÃO RÁPIDO DE TESTE UNITÁRIO (1 CONTATO) */}
+                <Button
+                  onClick={() => handleStartAdding(1)}
+                  disabled={isStartingTask || connectedCount === 0 || contacts.length === 0}
+                  variant="outline"
+                  className="py-5 text-sm font-bold border-amber-500/60 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 gap-2 cursor-pointer shadow-sm"
+                >
+                  <Sparkles className="h-4 w-4 text-amber-400" />
+                  🧪 Testar 1 Contato Agora
+                </Button>
+
+                {/* BOTÃO PRINCIPAL DE ADIÇÃO EM MASSA */}
+                <Button
+                  onClick={() => handleStartAdding()}
+                  disabled={isStartingTask || connectedCount === 0 || contacts.length === 0}
+                  className="sm:col-span-2 py-5 text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg gap-2 cursor-pointer"
+                >
+                  {isStartingTask ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Iniciando Robô...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 fill-white" />
+                      Iniciar Adição ({batchLimit === 1 ? '1 Contato de Teste' : batchLimit > 0 ? `${batchLimit} Contatos` : 'Todos os Lotes'})
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* TESTE COM NÚMERO CUSTOMIZADO DIGITADO NA HORA */}
+              <div className="flex flex-col sm:flex-row items-center gap-2 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs">
+                <span className="text-muted-foreground whitespace-nowrap font-medium flex items-center gap-1.5">
+                  <span>📱</span> Ou teste com um número específico:
+                </span>
+                <input
+                  type="text"
+                  placeholder="Ex: 4398370727 ou 554398370727"
+                  value={customTestPhone}
+                  onChange={(e) => setCustomTestPhone(e.target.value)}
+                  disabled={activeTask?.isRunning}
+                  className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-background border border-input font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full"
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => handleStartAdding(1, customTestPhone)}
+                  disabled={isStartingTask || connectedCount === 0 || !customTestPhone.trim()}
+                  className="h-8 text-xs font-bold gap-1 shrink-0"
+                >
+                  Testar Este Número
+                </Button>
+              </div>
+
               {connectedCount === 0 && (
                 <p className="text-xs text-center text-amber-500 mt-2 font-medium">
-                  ⚠️ Conecte pelo menos 1 WhatsApp no robô acima para habilitar a adição automática.
+                  ⚠️ Conecte o WhatsApp 1 no robô acima para habilitar o teste ou a adição automática.
                 </p>
               )}
             </div>
